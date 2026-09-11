@@ -18,7 +18,6 @@ export function Register() {
     inviteCode: '',
   });
   const [error, setError] = useState<string | null>(null);
-  const [confirmSent, setConfirmSent] = useState(false);
   const [busy, setBusy] = useState(false);
   // Un champ ne signale son erreur qu'une fois quitte (ou apres une tentative
   // d'envoi) : on ne veut pas crier "invalide" des la premiere lettre tapee.
@@ -52,42 +51,14 @@ export function Register() {
     setError(null);
     setBusy(true);
     try {
-      const { needsEmailConfirmation } = await register({
-        ...form,
-        email: form.email.trim(),
-        role,
-      });
-      if (needsEmailConfirmation) setConfirmSent(true);
+      await register({ ...form, email: form.email.trim(), role });
+      // La redirection est prise en charge par la garde <Guest> de App.tsx des
+      // que la session est ouverte.
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Inscription impossible.');
     } finally {
       setBusy(false);
     }
-  }
-
-  if (confirmSent) {
-    return (
-      <>
-        <Header title="Vérifie tes e-mails" back />
-        <Main noNav>
-          <div className="stack" style={{ gap: 14, paddingTop: 24 }}>
-            <div className="alert alert--success" role="status">
-              Compte créé. Un e-mail de confirmation vient d’être envoyé à{' '}
-              <strong>{form.email}</strong>.
-            </div>
-            <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
-              Confirme ton adresse, puis connecte-toi :{' '}
-              {role === 'coach'
-                ? 'ton équipe sera créée à ce moment-là.'
-                : 'tu rejoindras ton équipe à ce moment-là.'}
-            </p>
-            <Link className="btn" to="/login">
-              Aller à la connexion
-            </Link>
-          </div>
-        </Main>
-      </>
-    );
   }
 
   return (

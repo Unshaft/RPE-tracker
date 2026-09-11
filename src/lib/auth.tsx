@@ -32,11 +32,8 @@ interface AuthContextValue {
   /** Incrémenté à chaque mutation : sert de clé de rafraîchissement aux hooks. */
   revision: number;
   login: (email: string, password: string) => Promise<void>;
-  /**
-   * Crée le compte. Renvoie `needsEmailConfirmation` quand le projet Supabase
-   * exige une confirmation : il n'y a alors pas encore de session.
-   */
-  register: (input: RegisterInput) => Promise<{ needsEmailConfirmation: boolean }>;
+  /** Crée le compte, l'équipe associée, et ouvre la session dans la foulée. */
+  register: (input: RegisterInput) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (
     patch: Partial<Pick<PublicUser, 'firstName' | 'lastName' | 'position'>>,
@@ -63,43 +60,19 @@ function authMessage(error: AuthError): string {
   if (/email address.*invalid|unable to validate email/i.test(error.message)) {
     return 'Adresse e-mail invalide.';
   }
-  return error.message;
-}
-
-/**
- * Applique le rattachement à une équipe demandé à l'inscription.
- *
- * Quand la confirmation d'e-mail est exigée, l'inscription ne produit aucune
- * session : impossible de créer l'équipe ou de rejoindre celle du coach dans la
- * foulée, puisque toute écriture passe par RLS. L'intention est donc rangée
- * dans les métadonnées du compte et rejouée ici, à la première connexion — puis
- * effacée pour ne pas être rejouée à chaque fois.
- */
-async function settlePendingTeam(profile: PublicUser): Promise<PublicUser> {
-  if (profile.teamId) return profile;
-
-  const { data } = await supabase.auth.getUser();
-  const meta = data.user?.user_metadata ?? {};
-  const pendingTeamName = typeof meta.pending_team_name === 'string' ? meta.pending_team_name : '';
-  const pendingCode = typeof meta.pending_invite_code === 'string' ? meta.pending_invite_code : '';
-  if (!pendingTeamName && !pendingCode) return profile;
-
-  try {
-    const team = pendingTeamName
-      ? await db.createTeam(pendingTeamName, profile.id)
-      : await db.joinTeamByCode(pendingCode);
-    await supabase.auth.updateUser({
-      data: { pending_team_name: null, pending_invite_code: null },
-    });
-    return { ...profile, teamId: team.id };
-  } catch {
-    // Un code devenu invalide ne doit pas bloquer la connexion : l'utilisateur
-    // pourra rejoindre son équipe depuis son profil.
-    await supabase.auth.updateUser({
-      data: { pending_team_name: null, pending_invite_code: null },
-    });
-    return profile;
+  // Le fournisseur d'e-mail integre de Supabase plafonne a 2 envois par heure,
+  // et impose 60 s entre deux demandes pour un meme compte. Sans message dedie,
+  // l'utilisateur voit un texte anglais brut et croit a un bug de l'app.
+  if (/for security purposes.*after \d+ seconds|only request this after/i.test(error.message)) {
+    return 'Trop de tentatives rapprochées. Patiente une minute avant de réessayer.';
   }
+  if (/rate limit|too many requests/i.test(error.message)) {
+    return (
+      "Limite d'envoi d'e-mails atteinte pour le moment. Réessaie dans une heure, " +
+      'ou contacte ton coach si le problème persiste.'
+    );
+  }
+  return error.message;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -128,9 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    let profile = await db.getProfile(userId);
-    if (loadingFor.current !== userId) return;
-    if (profile) profile = await settlePendingTeam(profile);
+    const profile = await db.getProfile(userId);
     if (loadingFor.current !== userId) return;
     setUser(profile);
 
@@ -187,10 +158,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             last_name: input.lastName.trim(),
             role: input.role,
             position: input.position?.trim() || null,
-            // Rejoué à la première connexion par `settlePendingTeam` : sans
-            // session, aucune écriture n'est possible ici.
-            pending_team_name: input.role === 'coach' ? teamName : null,
-            pending_invite_code: input.role === 'player' ? inviteCode || null : null,
           },
         },
       });
@@ -199,8 +166,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const userId = data.user?.id;
       if (!userId) throw new db.DbError("La création du compte n'a pas abouti.");
 
-      // Pas de session : le compte attend la confirmation de l'adresse e-mail.
-      if (!data.session) return { needsEmailConfirmation: true };
+      // L'inscription ouvre la session immédiatement. Sans session, c'est que
+      // « Confirm email » est reste actif cote Supabase : on le dit clairement
+      // plutot que de laisser un compte sans equipe, que RLS rendrait inutile.
+      if (!data.session) {
+        throw new db.DbError(
+          'Le compte a été créé mais la confirmation par e-mail est encore ' +
+            'activée sur le projet Supabase. Désactive « Confirm email » dans ' +
+            'Authentication → Sign In / Providers.',
+        );
+      }
+
+      // Session ouverte : les écritures passent RLS, l'équipe est reglée ici.
+      if (input.role === 'coach') {
+        await db.createTeam(teamName, userId);
+      } else if (inviteCode) {
+        try {
+          await db.joinTeamByCode(inviteCode);
+        } catch {
+          // Un code faux ne doit pas faire echouer une inscription deja actee :
+          // le joueur rejoindra son equipe depuis son profil.
+        }
+      }
 
       if (input.position?.trim()) {
         await db.updateProfile(userId, { position: input.position });
@@ -208,7 +195,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       await loadProfile(userId);
       refresh();
-      return { needsEmailConfirmation: false };
     },
     [loadProfile, refresh],
   );

@@ -35,10 +35,14 @@ Les comptes sont créés depuis l'application. Un coach saisit le nom de son
 équipe à l'inscription et obtient un code d'invitation à six caractères, que
 ses joueurs renseignent à leur tour pour rejoindre l'effectif.
 
-Le projet Supabase exige une confirmation d'adresse e-mail : la création de
-l'équipe (ou le rattachement à celle-ci) est donc reportée à la première
-connexion. Pour supprimer cette étape, désactiver *Confirm email* dans
-Authentication → Providers → Email du tableau de bord Supabase.
+L'inscription ouvre la session immédiatement : l'équipe est créée (coach) ou
+rejointe (joueur) dans la foulée. Cela suppose que *Confirm email* soit
+**désactivé** dans Authentication → Sign In / Providers du tableau de bord
+Supabase ; sinon l'inscription s'arrête sur un message explicite.
+
+Le service d'e-mail intégré de Supabase est plafonné à 2 envois par heure et
+n'est prévu que pour le développement. Avant d'ouvrir l'app à de vrais
+utilisateurs, configurer un SMTP personnel dans Authentication → Emails.
 
 ## Métriques
 
