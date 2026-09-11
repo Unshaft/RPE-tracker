@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Header, Main } from '../../components/Layout';
-import { Card, EmptyState, Section, rpeVars } from '../../components/ui';
+import { Card, EmptyState, Loading, Section, rpeVars } from '../../components/ui';
 import { formatLoad, plural } from '../../components/charts/chartUtils';
 import { useAuth } from '../../lib/auth';
 import { longDate, startOfWeek, weekLabel } from '../../lib/date';
@@ -23,22 +23,41 @@ function groupByWeek(sessions: TrainingSession[]) {
 export function History() {
   const { user, refresh } = useAuth();
   const navigate = useNavigate();
-  const sessions = usePlayerSessions(user?.id);
+  const { data: sessions, loading, error } = usePlayerSessions(user?.id);
   const [openId, setOpenId] = useState<string | null>(null);
   const weeks = useMemo(() => groupByWeek(sessions), [sessions]);
 
-  function remove(id: string) {
+  const [removeError, setRemoveError] = useState<string | null>(null);
+
+  async function remove(id: string) {
     if (!confirm('Supprimer définitivement cette séance ?')) return;
-    db.deleteSession(id);
-    setOpenId(null);
-    refresh();
+    try {
+      await db.deleteSession(id);
+      setOpenId(null);
+      refresh();
+    } catch (err) {
+      setRemoveError(err instanceof Error ? err.message : 'Suppression impossible.');
+    }
   }
 
   return (
     <>
       <Header title="Historique" subtitle={`${plural(sessions.length, 'séance enregistrée', 'séances enregistrées')}`} />
       <Main>
-        {weeks.length === 0 ? (
+        {removeError && (
+          <div className="alert alert--error" role="alert" style={{ marginTop: 14 }}>
+            {removeError}
+          </div>
+        )}
+        {error ? (
+          <div style={{ paddingTop: 24 }}>
+            <div className="alert alert--error" role="alert">{error}</div>
+          </div>
+        ) : loading ? (
+          <div style={{ paddingTop: 24 }}>
+            <Card><Loading /></Card>
+          </div>
+        ) : weeks.length === 0 ? (
           <div style={{ paddingTop: 24 }}>
             <Card>
               <EmptyState title="Historique vide">

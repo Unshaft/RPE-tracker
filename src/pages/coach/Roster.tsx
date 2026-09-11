@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { formatLoad, plural } from '../../components/charts/chartUtils';
 import { Header, Main } from '../../components/Layout';
-import { Avatar, Card, EmptyState, Section, StatusBadge } from '../../components/ui';
+import { Avatar, Card, EmptyState, Loading, Section, StatusBadge } from '../../components/ui';
 import { IconChevron } from '../../components/icons';
 import { useAuth } from '../../lib/auth';
 import { compactRelative, diffDays, today } from '../../lib/date';
@@ -11,8 +11,9 @@ import { buildTeamRows, sortRows } from '../../lib/team';
 
 export function Roster() {
   const { team } = useAuth();
-  const players = useTeamPlayers(team?.id);
-  const sessionsByPlayer = useTeamSessions(team?.id);
+  const { data: players, loading: playersLoading, error: playersError } = useTeamPlayers(team?.id);
+  const { data: sessionsByPlayer, loading: sessionsLoading } = useTeamSessions(team?.id);
+  const loading = playersLoading || sessionsLoading;
   const [copied, setCopied] = useState(false);
   const ref = today();
 
@@ -71,9 +72,15 @@ export function Roster() {
           </Card>
         </Section>
 
+        {playersError && (
+          <div className="alert alert--error" role="alert">{playersError}</div>
+        )}
+
         <Section title="Joueurs">
           <Card flush>
-            {rows.length === 0 ? (
+            {loading ? (
+              <Loading />
+            ) : rows.length === 0 ? (
               <EmptyState title="Aucun joueur">
                 Partage le code ci-dessus pour constituer ton effectif.
               </EmptyState>

@@ -101,6 +101,20 @@ export function EmptyState({ title, children }: { title: string; children?: Reac
   );
 }
 
+/**
+ * Attente d'un chargement distant.
+ *
+ * Annoncé en `role="status"` : sans cela, un lecteur d'écran ne signale rien
+ * entre la navigation et l'arrivée des données.
+ */
+export function Loading({ label = 'Chargement…' }: { label?: string }) {
+  return (
+    <div className="empty" role="status" aria-live="polite">
+      <div className="empty__title">{label}</div>
+    </div>
+  );
+}
+
 /** Vue tableau : equivalent accessible de chaque graphique (valeurs exactes). */
 export function TableView({
   summary = 'Voir les valeurs',

@@ -3,6 +3,7 @@ import { addDays } from '../date';
 import {
   acwr,
   acwrZone,
+  calendarWeeks,
   chronicLoad,
   computePlayerMetrics,
   dailySeries,
@@ -11,6 +12,8 @@ import {
   sessionLoad,
   stdDev,
   strain,
+  weeklyRatio,
+  weeklyRatioSeries,
   weeklySeries,
 } from '../metrics';
 import type { SessionType, TrainingSession } from '../types';
@@ -162,5 +165,146 @@ describe('loadByType', () => {
     const byType = loadByType(sessions, END, 28);
     expect(byType.get('match')).toBe(480);
     expect(byType.get('muscu')).toBe(360);
+  });
+});
+
+/* END (2026-03-15) est un dimanche : la semaine calendaire en cours va du
+ * lundi 2026-03-09 au dimanche 2026-03-15 et elle est donc complete. */
+const MONDAY = '2026-03-09';
+
+/** Une seance unique de `load` UA posee le lundi de la semaine demandee. */
+function weekLoad(monday: string, load: number): TrainingSession {
+  return s(monday, 10, load / 10);
+}
+
+describe('calendarWeeks', () => {
+  it('decoupe en semaines lundi -> dimanche', () => {
+    const weeks = calendarWeeks([], END, 3);
+    expect(weeks).toHaveLength(3);
+    expect(weeks[2]).toMatchObject({ start: MONDAY, end: END, partial: false, elapsedDays: 7 });
+    expect(weeks[1]).toMatchObject({ start: '2026-03-02', end: '2026-03-08' });
+    expect(weeks[0]).toMatchObject({ start: '2026-02-23', end: '2026-03-01' });
+  });
+
+  it('marque la semaine en cours comme incomplete et compte les jours ecoules', () => {
+    const weeks = calendarWeeks([], '2026-03-11', 1); // un mercredi
+    expect(weeks[0]).toMatchObject({ start: MONDAY, partial: true, elapsedDays: 3 });
+  });
+
+  it('agrege la charge et le nombre de seances de chaque semaine', () => {
+    const weeks = calendarWeeks([s(END, 8, 60), s(MONDAY, 5, 60)], END, 1);
+    expect(weeks[0].load).toBe(480 + 300);
+    expect(weeks[0].sessions).toBe(2);
+  });
+});
+
+describe('weeklyRatio', () => {
+  it('rapporte la semaine en cours a la moyenne des 4 precedentes', () => {
+    // 700 UA par semaine calendaire sur 5 semaines.
+    const r = weeklyRatio(flat(35), END);
+    expect(r.current).toBe(700);
+    expect(r.baseline).toBe(700);
+    expect(r.ratio).toBeCloseTo(1, 10);
+    expect(r.weeksUsed).toBe(4);
+    expect(r.partial).toBe(false);
+  });
+
+  it('monte au-dessus de 1 quand la semaine en cours depasse la reference', () => {
+    const sessions = [
+      weekLoad('2026-02-09', 500),
+      weekLoad('2026-02-16', 500),
+      weekLoad('2026-02-23', 500),
+      weekLoad('2026-03-02', 500),
+      weekLoad(MONDAY, 800),
+    ];
+    const r = weeklyRatio(sessions, END);
+    expect(r.baseline).toBe(500);
+    expect(r.ratio).toBeCloseTo(1.6, 10);
+    expect(acwrZone(r.ratio)!.zone).toBe('danger');
+  });
+
+  it('compte une vraie semaine de repos comme un zero dans la reference', () => {
+    const sessions = [
+      weekLoad('2026-02-09', 700),
+      weekLoad('2026-02-16', 700),
+      weekLoad('2026-02-23', 700),
+      // 2026-03-02 : semaine de repos, aucune seance
+      weekLoad(MONDAY, 700),
+    ];
+    const r = weeklyRatio(sessions, END);
+    expect(r.weeksUsed).toBe(4);
+    expect(r.baseline).toBe(525); // (700 + 700 + 700 + 0) / 4
+    expect(r.ratio).toBeCloseTo(700 / 525, 10);
+  });
+
+  it('ignore les semaines anterieures a la premiere seance du joueur', () => {
+    // Joueur arrive il y a 3 semaines : seules 2 semaines de reference existent.
+    const r = weeklyRatio(flat(21), END);
+    expect(r.weeksUsed).toBe(2);
+    expect(r.baseline).toBe(700);
+    expect(r.ratio).toBeCloseTo(1, 10);
+  });
+
+  it('renvoie null tant qu il n y a aucune semaine de reference', () => {
+    const r = weeklyRatio([weekLoad(MONDAY, 600)], END);
+    expect(r.current).toBe(600);
+    expect(r.weeksUsed).toBe(0);
+    expect(r.ratio).toBeNull();
+  });
+
+  it('n inclut pas la semaine en cours dans sa propre reference', () => {
+    const sessions = [weekLoad('2026-03-02', 400), weekLoad(MONDAY, 1200)];
+    const r = weeklyRatio(sessions, END);
+    expect(r.baseline).toBe(400);
+    expect(r.ratio).toBe(3);
+  });
+});
+
+describe('weeklyRatioSeries', () => {
+  it('produit un point par semaine calendaire, du plus ancien au plus recent', () => {
+    const series = weeklyRatioSeries(flat(35), END, 5);
+    expect(series).toHaveLength(5);
+    expect(series[0].start).toBe('2026-02-09');
+    expect(series[4].start).toBe(MONDAY);
+    expect(series[4].ratio).toBeCloseTo(1, 10);
+  });
+
+  it('calcule chaque semaine telle qu elle se presentait a sa propre fin', () => {
+    const sessions = [
+      weekLoad('2026-02-09', 500),
+      weekLoad('2026-02-16', 500),
+      weekLoad('2026-02-23', 1000),
+      weekLoad('2026-03-02', 500),
+      weekLoad(MONDAY, 500),
+    ];
+    const series = weeklyRatioSeries(sessions, END, 5);
+    // Semaine du 23/02 : 1000 UA contre une reference de 500 UA.
+    expect(series[2].ratio).toBe(2);
+    // Le pic ne contamine pas le ratio de la semaine du 23/02 elle-meme.
+    expect(series[2].load).toBe(1000);
+    expect(series[2].baseline).toBe(500);
+  });
+
+  it('laisse le ratio a null sur les semaines sans reference', () => {
+    const series = weeklyRatioSeries([weekLoad(MONDAY, 600)], END, 3);
+    expect(series.map((w) => w.ratio)).toEqual([null, null, null]);
+  });
+});
+
+describe('computePlayerMetrics — lecture calendaire', () => {
+  it('expose le ratio hebdomadaire a cote de l ACWR', () => {
+    const m = computePlayerMetrics(flat(35), END);
+    expect(m.week.ratio).toBeCloseTo(1, 10);
+    expect(m.acwr).toBeCloseTo(1, 10);
+  });
+
+  it('les deux ratios different quand la semaine calendaire est incomplete', () => {
+    // Charge constante, vue un mercredi : l ACWR glissant reste a 1 alors que
+    // la semaine calendaire n en est qu a 3 jours sur 7.
+    const sessions = Array.from({ length: 40 }, (_, i) => s(addDays('2026-03-11', -i), 10, 10));
+    const m = computePlayerMetrics(sessions, '2026-03-11');
+    expect(m.acwr).toBeCloseTo(1, 10);
+    expect(m.week.partial).toBe(true);
+    expect(m.week.ratio!).toBeLessThan(0.8);
   });
 });

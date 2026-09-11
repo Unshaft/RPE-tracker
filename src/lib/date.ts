@@ -88,3 +88,13 @@ export function compactRelative(key: string, ref = today()): string {
   if (delta > 1 && delta < 7) return `il y a ${delta} j`;
   return shortDate(key);
 }
+
+/** Dimanche de la semaine ISO contenant `key`. */
+export function endOfWeek(key: string): string {
+  return addDays(startOfWeek(key), 6);
+}
+
+/** Libelle compact d’une semaine calendaire : « sem. du 9 mars ». */
+export function weekShortLabel(mondayKey: string): string {
+  return `sem. du ${shortDate(mondayKey)}`;
+}

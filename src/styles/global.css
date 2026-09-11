@@ -7,20 +7,21 @@
 :root {
   color-scheme: light;
 
-  --plane: #f2f2ef;
-  --surface-1: #fcfcfb;
-  --surface-2: #f4f4f1;
-  --surface-inset: #eeeeea;
+  /* Chrome : identite CBN (creme "feather" + encre + rouge). */
+  --plane: #f7f4ec;
+  --surface-1: #ffffff;
+  --surface-2: #f2eee3;
+  --surface-inset: #ece7d9;
 
-  --text-primary: #0b0b0b;
-  --text-secondary: #52514e;
-  --text-muted: #898781;
-  --text-invert: #fcfcfb;
+  --text-primary: #17120f;
+  --text-secondary: #5b524c;
+  --text-muted: #8d8579;
+  --text-invert: #f7f4ec;
 
-  --border: rgba(11, 11, 11, 0.1);
-  --border-strong: rgba(11, 11, 11, 0.18);
-  --grid: #e1e0d9;
-  --baseline: #c3c2b7;
+  --border: rgba(23, 18, 15, 0.1);
+  --border-strong: rgba(23, 18, 15, 0.18);
+  --grid: #e4dece;
+  --baseline: #c7bfab;
 
   --series-1: #2a78d6;
   --series-2: #eb6834;
@@ -37,7 +38,11 @@
   --status-serious-ink: #a1441c;
   --status-critical-ink: #b02a2a;
 
-  --accent: #2a78d6;
+  /* Rouge CBN. Attention : proche de --status-critical, voir la note en tete
+     de la section "Statuts" — le rouge porte donc deux roles (marque + risque). */
+  --accent: #e2231a;
+  --accent-deep: #b5170f;
+  --accent-soft: #fbe4e1;
   --accent-ink: #ffffff;
 
   /* Rampe ordinale RPE : 5 paliers d'intensite, une seule teinte, ecarts de
@@ -62,18 +67,18 @@
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme='light'])) {
     color-scheme: dark;
-    --plane: #0d0d0d;
-    --surface-1: #1a1a19;
-    --surface-2: #232322;
-    --surface-inset: #252523;
-    --text-primary: #ffffff;
-    --text-secondary: #c3c2b7;
-    --text-muted: #898781;
-    --text-invert: #0b0b0b;
-    --border: rgba(255, 255, 255, 0.1);
-    --border-strong: rgba(255, 255, 255, 0.2);
-    --grid: #2c2c2a;
-    --baseline: #383835;
+    --plane: #0a0807;
+    --surface-1: #17120f;
+    --surface-2: #211a16;
+    --surface-inset: #241c17;
+    --text-primary: #f7f4ec;
+    --text-secondary: #c9bfb0;
+    --text-muted: #948b7d;
+    --text-invert: #17120f;
+    --border: rgba(247, 244, 236, 0.1);
+    --border-strong: rgba(247, 244, 236, 0.2);
+    --grid: #2b221d;
+    --baseline: #3a2e26;
     --series-1: #3987e5;
     --series-2: #d95926;
     --series-3: #199e70;
@@ -83,8 +88,10 @@
     --status-warning-ink: #fab219;
     --status-serious-ink: #ec835a;
     --status-critical-ink: #e07070;
-    --accent: #3987e5;
-    --accent-ink: #ffffff;
+    --accent: #f4564d;
+    --accent-deep: #e2231a;
+    --accent-soft: #3a1b18;
+    --accent-ink: #17120f;
 
     --rpe-1: #184f95; --rpe-ink-1: #ffffff;
     --rpe-2: #256abf; --rpe-ink-2: #ffffff;
@@ -98,18 +105,18 @@
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --plane: #0d0d0d;
-  --surface-1: #1a1a19;
-  --surface-2: #232322;
-  --surface-inset: #252523;
-  --text-primary: #ffffff;
-  --text-secondary: #c3c2b7;
-  --text-muted: #898781;
-  --text-invert: #0b0b0b;
-  --border: rgba(255, 255, 255, 0.1);
-  --border-strong: rgba(255, 255, 255, 0.2);
-  --grid: #2c2c2a;
-  --baseline: #383835;
+  --plane: #0a0807;
+  --surface-1: #17120f;
+  --surface-2: #211a16;
+  --surface-inset: #241c17;
+  --text-primary: #f7f4ec;
+  --text-secondary: #c9bfb0;
+  --text-muted: #948b7d;
+  --text-invert: #17120f;
+  --border: rgba(247, 244, 236, 0.1);
+  --border-strong: rgba(247, 244, 236, 0.2);
+  --grid: #2b221d;
+  --baseline: #3a2e26;
   --series-1: #3987e5;
   --series-2: #d95926;
   --series-3: #199e70;
@@ -119,8 +126,10 @@
   --status-warning-ink: #fab219;
   --status-serious-ink: #ec835a;
   --status-critical-ink: #e07070;
-  --accent: #3987e5;
-  --accent-ink: #ffffff;
+  --accent: #f4564d;
+  --accent-deep: #e2231a;
+  --accent-soft: #3a1b18;
+  --accent-ink: #17120f;
 
   --rpe-1: #184f95; --rpe-ink-1: #ffffff;
   --rpe-2: #256abf; --rpe-ink-2: #ffffff;
@@ -651,3 +660,49 @@ textarea.input { height: auto; min-height: 78px; padding: 11px 13px; resize: ver
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* --- Validation de formulaire --------------------------------------------- */
+
+.input--invalid { border-color: var(--status-critical); }
+.input--invalid:focus { outline-color: var(--status-critical); }
+
+.field__error {
+  font-size: 12px;
+  font-weight: 560;
+  color: var(--status-critical-ink);
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+}
+
+.field__suggestion {
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+.field__suggestion strong { color: var(--accent); text-decoration: underline; }
+
+/* Jauge de robustesse : 4 segments remplis selon le score. */
+.pwstrength { display: flex; flex-direction: column; gap: 6px; }
+.pwstrength__bars { display: flex; gap: 4px; }
+.pwstrength__bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--surface-inset);
+  transition: background-color 140ms ease;
+}
+.pwstrength__bar[data-on='1'] { background: var(--status-critical); }
+.pwstrength__bar[data-on='2'] { background: var(--status-serious); }
+.pwstrength__bar[data-on='3'] { background: var(--status-warning); }
+.pwstrength__bar[data-on='4'] { background: var(--status-good); }
+.pwstrength__label { font-size: 12px; color: var(--text-secondary); }
+
+.pwrules { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.pwrules__item { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+.pwrules__item[data-met='true'] { color: var(--status-good-ink); }
+.pwrules__mark { width: 13px; flex: none; text-align: center; font-weight: 700; }

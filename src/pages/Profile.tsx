@@ -2,7 +2,6 @@ import { useState, type FormEvent } from 'react';
 import { Header, Main } from '../components/Layout';
 import { Avatar, Card, Section } from '../components/ui';
 import { useAuth } from '../lib/auth';
-import * as db from '../lib/db';
 import { useTheme, type ThemePref } from '../lib/theme';
 
 const THEMES: { key: ThemePref; label: string }[] = [
@@ -25,20 +24,24 @@ export function Profile() {
 
   if (!user) return null;
 
-  function saveProfile(e: FormEvent) {
-    e.preventDefault();
-    updateProfile({
-      firstName: form.firstName.trim(),
-      lastName: form.lastName.trim(),
-      position: form.position.trim() || undefined,
-    });
-    setMessage({ kind: 'success', text: 'Profil mis à jour.' });
-  }
-
-  function submitCode(e: FormEvent) {
+  async function saveProfile(e: FormEvent) {
     e.preventDefault();
     try {
-      joinTeam(code);
+      await updateProfile({
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
+        position: form.position.trim() || undefined,
+      });
+      setMessage({ kind: 'success', text: 'Profil mis à jour.' });
+    } catch (err) {
+      setMessage({ kind: 'error', text: err instanceof Error ? err.message : 'Enregistrement impossible.' });
+    }
+  }
+
+  async function submitCode(e: FormEvent) {
+    e.preventDefault();
+    try {
+      await joinTeam(code);
       setCode('');
       setMessage({ kind: 'success', text: 'Équipe rejointe.' });
     } catch (err) {
@@ -46,21 +49,15 @@ export function Profile() {
     }
   }
 
-  function submitTeam(e: FormEvent) {
+  async function submitTeam(e: FormEvent) {
     e.preventDefault();
     try {
-      const created = createOwnTeam(teamName);
+      const created = await createOwnTeam(teamName);
       setTeamName('');
       setMessage({ kind: 'success', text: `Équipe « ${created.name} » créée.` });
     } catch (err) {
       setMessage({ kind: 'error', text: err instanceof Error ? err.message : 'Création impossible.' });
     }
-  }
-
-  function hardReset() {
-    if (!confirm('Effacer toutes les données locales (comptes et séances) ?')) return;
-    db.resetAll();
-    location.reload();
   }
 
   return (
@@ -214,12 +211,10 @@ export function Profile() {
 
         <Section title="Compte">
           <div className="stack">
-            <button className="btn btn--ghost" onClick={logout}>Se déconnecter</button>
-            <button className="btn btn--danger" onClick={hardReset}>
-              Réinitialiser les données locales
-            </button>
+            <button className="btn btn--ghost" onClick={() => void logout()}>Se déconnecter</button>
             <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
-              Les données sont stockées uniquement sur cet appareil.
+              Tes séances sont enregistrées sur ton compte : tu les retrouves depuis
+              n’importe quel appareil.
             </p>
           </div>
         </Section>

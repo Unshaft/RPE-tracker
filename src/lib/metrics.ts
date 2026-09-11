@@ -1,4 +1,4 @@
-import { addDays, lastNDays, toDayKey } from './date';
+import { addDays, diffDays, lastNDays, startOfWeek, toDayKey } from './date';
 import type { TrainingSession } from './types';
 
 /**
@@ -172,6 +172,8 @@ export interface PlayerMetrics {
   previousAcute: number;
   /** Variation relative de la charge aiguë, `null` si semaine précédente vide. */
   acuteDelta: number | null;
+  /** Lecture calendaire : semaine en cours vs 4 semaines precedentes. */
+  week: WeeklyRatio;
 }
 
 export function computePlayerMetrics(
@@ -197,6 +199,7 @@ export function computePlayerMetrics(
       : null,
     previousAcute,
     acuteDelta: previousAcute > 0 ? (acute - previousAcute) / previousAcute : null,
+    week: weeklyRatio(sessions, end),
   };
 }
 
@@ -249,3 +252,148 @@ export function referenceDay(sessions: TrainingSession[]): string {
   const latest = sessions.reduce((max, s) => (s.date > max ? s.date : max), now);
   return latest;
 }
+
+/* ------------------------------------------------------------------ *
+ * Semaines calendaires (lundi -> dimanche)
+ *
+ * Lecture demandee par le staff : la charge de la semaine en cours,
+ * comparee a la moyenne des 4 semaines calendaires precedentes. C’est la
+ * meme famille d’indicateur que l’ACWR, avec deux differences assumees :
+ * les fenetres sont calendaires (et non glissantes) et la reference exclut
+ * la semaine en cours. Les deux ratios sont exposes cote a cote.
+ * ------------------------------------------------------------------ */
+
+/** Nombre de semaines de reference pour le ratio hebdomadaire. */
+export const WEEKLY_LOOKBACK = 4;
+
+export interface CalendarWeek {
+  /** Lundi de la semaine. */
+  start: string;
+  /** Dimanche de la semaine. */
+  end: string;
+  load: number;
+  sessions: number;
+  /** Jours de la semaine deja ecoules au jour de reference (0 a 7). */
+  elapsedDays: number;
+  /** Vrai tant que la semaine n’est pas terminee. */
+  partial: boolean;
+}
+
+function buildCalendarWeek(
+  sessions: TrainingSession[],
+  monday: string,
+  reference: string,
+): CalendarWeek {
+  const end = addDays(monday, 6);
+  const inWeek = sessions.filter((s) => s.date >= monday && s.date <= end);
+  const elapsedDays = Math.min(7, Math.max(0, diffDays(reference, monday) + 1));
+  return {
+    start: monday,
+    end,
+    load: inWeek.reduce((a, s) => a + sessionLoad(s), 0),
+    sessions: inWeek.length,
+    elapsedDays,
+    partial: elapsedDays < 7,
+  };
+}
+
+/**
+ * Les `weeks` dernieres semaines calendaires, de la plus ancienne a celle
+ * qui contient `end`.
+ */
+export function calendarWeeks(
+  sessions: TrainingSession[],
+  end: string,
+  weeks: number,
+): CalendarWeek[] {
+  const currentMonday = startOfWeek(end);
+  const out: CalendarWeek[] = [];
+  for (let i = weeks - 1; i >= 0; i--) {
+    out.push(buildCalendarWeek(sessions, addDays(currentMonday, -7 * i), end));
+  }
+  return out;
+}
+
+/** Date de la toute premiere seance enregistree, `null` si aucune. */
+function firstSessionDate(sessions: TrainingSession[]): string | null {
+  return sessions.reduce<string | null>(
+    (min, s) => (min === null || s.date < min ? s.date : min),
+    null,
+  );
+}
+
+export interface WeeklyRatio {
+  /** Charge de la semaine calendaire en cours, en UA. */
+  current: number;
+  /** Moyenne des semaines calendaires precedentes retenues, en UA. */
+  baseline: number;
+  /** current / baseline. `null` tant qu’il n’y a pas d’historique exploitable. */
+  ratio: number | null;
+  /** Semaines precedentes reellement prises en compte (au plus `lookback`). */
+  weeksUsed: number;
+  elapsedDays: number;
+  partial: boolean;
+}
+
+/**
+ * Charge de la semaine calendaire en cours rapportee a la moyenne des
+ * `lookback` semaines precedentes.
+ *
+ * Les semaines anterieures a la premiere seance du joueur sont exclues de la
+ * moyenne : sans cela, un joueur qui vient d’arriver aurait une reference
+ * artificiellement basse et passerait en zone rouge des sa premiere semaine.
+ * En revanche une semaine sans seance posterieure a ses debuts compte bien
+ * pour 0 : c’est une vraie semaine de repos, et elle doit peser.
+ */
+export function weeklyRatio(
+  sessions: TrainingSession[],
+  end: string,
+  lookback = WEEKLY_LOOKBACK,
+): WeeklyRatio {
+  const weeks = calendarWeeks(sessions, end, lookback + 1);
+  const current = weeks[weeks.length - 1];
+  const first = firstSessionDate(sessions);
+  const previous = weeks
+    .slice(0, -1)
+    .filter((w) => first !== null && w.end >= first);
+  const baseline = mean(previous.map((w) => w.load));
+  return {
+    current: current.load,
+    baseline,
+    ratio: baseline > 0 ? current.load / baseline : null,
+    weeksUsed: previous.length,
+    elapsedDays: current.elapsedDays,
+    partial: current.partial,
+  };
+}
+
+export interface WeeklyRatioPoint extends CalendarWeek {
+  /** Moyenne des semaines precedentes, telle que vue a la fin de cette semaine. */
+  baseline: number;
+  ratio: number | null;
+}
+
+/**
+ * Historique du ratio hebdomadaire, une valeur par semaine calendaire.
+ * Chaque point est calcule tel qu’il se presentait a la fin de sa propre
+ * semaine, pour que la courbe reproduise ce que le staff a vu sur le moment.
+ */
+export function weeklyRatioSeries(
+  sessions: TrainingSession[],
+  end: string,
+  weeks: number,
+  lookback = WEEKLY_LOOKBACK,
+): WeeklyRatioPoint[] {
+  return calendarWeeks(sessions, end, weeks).map((week) => {
+    const asOf = week.end < end ? week.end : end;
+    const r = weeklyRatio(sessions, asOf, lookback);
+    return { ...week, baseline: r.baseline, ratio: r.ratio };
+  });
+}
+
+/**
+ * Les deux ratios — ACWR glissant et ratio hebdomadaire calendaire — sont
+ * deux estimations du meme rapport « charge recente / charge habituelle » et
+ * partagent donc la meme grille de lecture.
+ */
+export const riskZone = acwrZone;

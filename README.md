@@ -16,7 +16,8 @@ onglets en bas, cibles tactiles ≥ 44 px, saisie en quelques appuis). Sur grand
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173
+vercel env pull --yes   # récupère la configuration Supabase dans .env.local
+npm run dev             # http://localhost:5173
 ```
 
 Autres scripts :
@@ -26,20 +27,18 @@ npm run build      # build de production (tsc + vite)
 npm run preview    # sert le build
 npm test           # tests unitaires des métriques (vitest)
 npm run typecheck  # tsc --noEmit
+npm run db:migrate # applique les migrations SQL en attente
+npm run db:verify  # vérifie les policies RLS de bout en bout
 ```
 
-### Comptes de démonstration
+Les comptes sont créés depuis l'application. Un coach saisit le nom de son
+équipe à l'inscription et obtient un code d'invitation à six caractères, que
+ses joueurs renseignent à leur tour pour rejoindre l'effectif.
 
-Au premier lancement, un jeu de données déterministe est créé : une équipe,
-8 joueurs et ~10 semaines de séances (dont un joueur en surcharge, un en reprise
-après blessure, un irrégulier).
-
-| Rôle   | E-mail            | Mot de passe |
-|--------|-------------------|--------------|
-| Joueur | `joueur@demo.fr`  | `demo1234`   |
-| Coach  | `coach@demo.fr`   | `demo1234`   |
-
-Code d'invitation de l'équipe de démo : `RIV2026`.
+Le projet Supabase exige une confirmation d'adresse e-mail : la création de
+l'équipe (ou le rattachement à celle-ci) est donc reportée à la première
+connexion. Pour supprimer cette étape, désactiver *Confirm email* dans
+Authentication → Providers → Email du tableau de bord Supabase.
 
 ## Métriques
 
@@ -70,26 +69,66 @@ src/
     metrics.ts    calcul de charge, ACWR, monotonie, contrainte  ← testé
     team.ts       agrégations d'équipe (classements, alertes, moyennes)
     date.ts       utilitaires de date en heure locale (clés YYYY-MM-DD)
-    db.ts         persistance (localStorage) derrière une API isolée
-    auth.tsx      contexte d'authentification et de session
-    seed.ts       jeu de démonstration déterministe
+    supabase.ts   client Supabase et schéma typé de la base
+    db.ts         accès aux données : seul fichier qui connaît les tables
+    auth.tsx      contexte d'authentification (Supabase Auth) et de session
+    hooks.ts      chargement asynchrone des données pour les écrans
   components/
     charts/       graphiques SVG maison (barres, lignes, jauge, sparkline)
     LoadDashboard.tsx  bloc d'analyse partagé joueur / fiche coach
   pages/
     player/       tableau de bord, saisie, historique
     coach/        tableau de bord équipe, effectif, fiche joueur
+supabase/
+  migrations/     schéma SQL, policies RLS, triggers
+scripts/
+  migrate.mjs     applique les migrations en attente
+  smoke-rls.mjs   vérifie le cloisonnement des données
 ```
 
 ### Persistance
 
-Les données vivent dans le `localStorage` du navigateur, derrière l'API
-asynchrone de `src/lib/db.ts`. **Brancher un vrai backend (REST, Supabase…)
-revient à réécrire ce seul fichier**, sans toucher aux écrans.
+Les données vivent dans **Postgres, chez Supabase**. `src/lib/db.ts` est le seul
+fichier qui connaît la forme des tables : il traduit les colonnes `snake_case`
+en types du domaine, et les écrans n'en savent rien.
 
-Le hachage des mots de passe (SHA-256 salé, WebCrypto) suffit pour une démo
-locale : une mise en production doit déléguer l'authentification au backend
-(bcrypt/argon2, jetons de session).
+L'authentification est déléguée à **Supabase Auth** (e-mail / mot de passe,
+jetons JWT). L'application ne manipule aucun mot de passe.
+
+#### Cloisonnement
+
+L'isolation n'est pas assurée par le code client mais par les **policies RLS**,
+c'est-à-dire par la base elle-même. Un client malveillant qui utiliserait la clé
+anon pour demander les séances d'un autre joueur ne reçoit pas une erreur : il
+reçoit zéro ligne.
+
+| Qui | Voit | Écrit |
+|---|---|---|
+| Joueur | son profil, ses séances, son équipe | ses séances, son profil |
+| Coach | les profils et séances de son effectif | son équipe, son profil |
+| Tiers | rien | rien |
+
+Deux détails qui comptent :
+
+- les fonctions d'appui aux policies vivent dans un schéma `private`, que
+  PostgREST n'expose pas — mais `authenticated` doit pouvoir les **exécuter**,
+  puisqu'une policy est évaluée avec les privilèges de l'appelant ;
+- rejoindre une équipe passe par la fonction `join_team(code)` en
+  `SECURITY DEFINER`, car lister les équipes rendrait les codes d'invitation
+  énumérables.
+
+`npm run db:verify` vérifie tout cela contre la vraie base, avec la clé anon :
+il crée des comptes jetables, tente les accès interdits et les supprime.
+
+#### Migrations
+
+Le schéma est versionné dans `supabase/migrations`. `npm run db:migrate`
+applique celles qui manquent, chacune dans une transaction, et mémorise le
+résultat dans `schema_migrations`.
+
+La connexion est chiffrée avec vérification du certificat : Supabase signe ses
+serveurs Postgres avec sa propre autorité racine, absente du magasin système,
+donc `scripts/supabase-ca.crt` est épinglé explicitement.
 
 ### Visualisations
 
@@ -112,6 +151,11 @@ d'accessibilité de bout en bout :
 fenêtres glissantes, ACWR et ses zones, monotonie et contrainte (écart-type de
 population, jours de repos inclus), agrégats hebdomadaires et cas limites
 (historique vide, division par zéro, bornes de fenêtre).
+
+`npm run db:verify` couvre le cloisonnement des données contre la base réelle :
+création de profil par trigger, code d'invitation, rattachement différé à
+l'équipe, contraintes de validation, et surtout ce que chaque rôle ne doit
+**pas** pouvoir lire ou écrire.
 
 ## Licence
 

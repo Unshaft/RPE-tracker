@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Header, Main } from '../../components/Layout';
 import { LoadDashboard } from '../../components/LoadDashboard';
-import { Avatar, Card, EmptyState, Section, rpeVars } from '../../components/ui';
+import { Avatar, Card, EmptyState, Loading, Section, rpeVars } from '../../components/ui';
 import { IconChevron } from '../../components/icons';
 import { longDate, relativeDate, today } from '../../lib/date';
 import { useAuth } from '../../lib/auth';
@@ -11,7 +11,7 @@ import { SESSION_TYPES } from '../../lib/types';
 
 export function PlayerDashboard() {
   const { user, team } = useAuth();
-  const sessions = usePlayerSessions(user?.id);
+  const { data: sessions, loading, error } = usePlayerSessions(user?.id);
   const recent = sessions.slice(0, 3);
 
   if (!user) return null;
@@ -29,7 +29,13 @@ export function PlayerDashboard() {
       />
       <Main>
         <div style={{ paddingTop: 14 }}>
-          <LoadDashboard sessions={sessions} referenceDate={today()} />
+          {error ? (
+            <div className="alert alert--error" role="alert">{error}</div>
+          ) : loading ? (
+            <Loading label="Chargement de ta charge…" />
+          ) : (
+            <LoadDashboard sessions={sessions} referenceDate={today()} />
+          )}
         </div>
 
         <Section
@@ -43,7 +49,9 @@ export function PlayerDashboard() {
           }
         >
           <Card flush>
-            {recent.length === 0 ? (
+            {loading ? (
+              <Loading />
+            ) : recent.length === 0 ? (
               <EmptyState title="Rien de saisi pour l’instant">
                 Enregistre ta première séance après l’entraînement.
               </EmptyState>

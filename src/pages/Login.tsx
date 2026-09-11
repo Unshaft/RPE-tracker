@@ -2,7 +2,6 @@ import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Main } from '../components/Layout';
 import { useAuth } from '../lib/auth';
-import { DEMO_PASSWORD } from '../lib/seed';
 
 export function Login() {
   const { login } = useAuth();
@@ -24,12 +23,6 @@ export function Login() {
     }
   }
 
-  function fill(demoEmail: string) {
-    setEmail(demoEmail);
-    setPassword(DEMO_PASSWORD);
-    setError(null);
-  }
-
   return (
     <Main noNav>
       <div style={{ paddingTop: 48 }}>
@@ -45,7 +38,7 @@ export function Login() {
               marginBottom: 14,
             }}
           >
-            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="var(--series-1)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="var(--accent)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M3 17l4-6 4 3 4-8 4 5" />
             </svg>
           </div>
@@ -96,22 +89,6 @@ export function Login() {
           Pas encore de compte ? <Link to="/inscription">Créer un compte</Link>
         </p>
 
-        <div className="card" style={{ marginTop: 26 }}>
-          <div className="card__head">
-            <div>
-              <div className="card__title">Comptes de démonstration</div>
-              <div className="card__hint">10 semaines de données déjà saisies.</div>
-            </div>
-          </div>
-          <div className="row" style={{ gap: 8 }}>
-            <button type="button" className="btn btn--ghost btn--sm" style={{ flex: 1 }} onClick={() => fill('joueur@demo.fr')}>
-              Joueur
-            </button>
-            <button type="button" className="btn btn--ghost btn--sm" style={{ flex: 1 }} onClick={() => fill('coach@demo.fr')}>
-              Coach
-            </button>
-          </div>
-        </div>
       </div>
     </Main>
   );

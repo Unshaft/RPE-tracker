@@ -1,7 +1,7 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Header, Main } from '../../components/Layout';
-import { Card, Section, rpeVars } from '../../components/ui';
+import { Card, Loading, Section, rpeVars } from '../../components/ui';
 import { useAuth } from '../../lib/auth';
 import { addDays, today } from '../../lib/date';
 import * as db from '../../lib/db';
@@ -15,7 +15,7 @@ export function NewSession() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const editId = params.get('id');
-  const sessions = usePlayerSessions(user?.id);
+  const { data: sessions, loading } = usePlayerSessions(user?.id);
   const editing = useMemo(() => sessions.find((s) => s.id === editId), [sessions, editId]);
 
   const [date, setDate] = useState(editing?.date ?? today());
@@ -24,13 +24,30 @@ export function NewSession() {
   const [rpe, setRpe] = useState<number | null>(editing?.rpe ?? null);
   const [comment, setComment] = useState(editing?.comment ?? '');
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  /**
+   * En édition, la séance n'est connue qu'une fois l'historique chargé : les
+   * champs sont donc remplis après coup. On ne le fait qu'une seule fois, sinon
+   * un rechargement de la liste écraserait la saisie en cours.
+   */
+  const prefilled = useRef(false);
+  useEffect(() => {
+    if (!editing || prefilled.current) return;
+    prefilled.current = true;
+    setDate(editing.date);
+    setType(editing.type);
+    setDuration(editing.durationMin);
+    setRpe(editing.rpe);
+    setComment(editing.comment ?? '');
+  }, [editing]);
 
   const load = rpe === null ? null : rpe * duration;
   const rpeLabel = rpe === null ? null : RPE_SCALE.find((r) => r.value === rpe)?.label;
 
-  function submit(e: FormEvent) {
+  async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!user) return;
+    if (!user || busy) return;
     if (rpe === null) {
       setError('Choisis ton niveau de difficulté ressentie (RPE).');
       return;
@@ -49,11 +66,31 @@ export function NewSession() {
       comment: comment.trim() || undefined,
     };
 
-    if (editing) db.updateSession(editing.id, payload);
-    else db.addSession(payload);
+    setBusy(true);
+    setError(null);
+    try {
+      if (editing) await db.updateSession(editing.id, payload);
+      else await db.addSession(payload);
+      refresh();
+      navigate('/', { replace: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Enregistrement impossible.');
+    } finally {
+      setBusy(false);
+    }
+  }
 
-    refresh();
-    navigate('/', { replace: true });
+  if (editId && loading) {
+    return (
+      <>
+        <Header title="Modifier la séance" back />
+        <Main>
+          <div style={{ paddingTop: 24 }}>
+            <Card><Loading /></Card>
+          </div>
+        </Main>
+      </>
+    );
   }
 
   return (
@@ -211,8 +248,12 @@ export function NewSession() {
           )}
 
           <div className="stack" style={{ marginTop: 18 }}>
-            <button className="btn" type="submit">
-              {editing ? 'Enregistrer les modifications' : 'Enregistrer la séance'}
+            <button className="btn" type="submit" disabled={busy}>
+              {busy
+                ? 'Enregistrement...'
+                : editing
+                  ? 'Enregistrer les modifications'
+                  : 'Enregistrer la séance'}
             </button>
             {editing && (
               <button type="button" className="btn btn--quiet" onClick={() => navigate(-1)}>

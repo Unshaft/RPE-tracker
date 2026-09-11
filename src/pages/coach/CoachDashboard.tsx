@@ -4,23 +4,24 @@ import { BarSeriesChart } from '../../components/charts/BarSeriesChart';
 import { formatLoad, formatRatio, plural } from '../../components/charts/chartUtils';
 import { Sparkline } from '../../components/charts/Sparkline';
 import { Header, Main } from '../../components/Layout';
-import { Avatar, Card, EmptyState, Section, StatusBadge, TableView, Tile } from '../../components/ui';
+import { Avatar, Card, EmptyState, Loading, Section, StatusBadge, TableView, Tile } from '../../components/ui';
 import { IconChevron } from '../../components/icons';
 import { useAuth } from '../../lib/auth';
-import { longDate, shortDate, today } from '../../lib/date';
+import { longDate, shortDate, startOfWeek, today, weekLabel } from '../../lib/date';
 import { useTeamPlayers, useTeamSessions } from '../../lib/hooks';
 import { buildTeamRows, sortRows, summarizeTeam, teamWeeklyAverage, type SortKey } from '../../lib/team';
 
 const SORTS: { key: SortKey; label: string }[] = [
   { key: 'load', label: 'Charge' },
-  { key: 'acwr', label: 'Risque' },
+  { key: 'ratio', label: 'Risque' },
   { key: 'name', label: 'Nom' },
 ];
 
 export function CoachDashboard() {
   const { user, team } = useAuth();
-  const players = useTeamPlayers(team?.id);
-  const sessionsByPlayer = useTeamSessions(team?.id);
+  const { data: players, loading: playersLoading, error: playersError } = useTeamPlayers(team?.id);
+  const { data: sessionsByPlayer, loading: sessionsLoading } = useTeamSessions(team?.id);
+  const loading = playersLoading || sessionsLoading;
   const [sort, setSort] = useState<SortKey>('load');
   const ref = today();
 
@@ -51,6 +52,25 @@ export function CoachDashboard() {
     );
   }
 
+  if (loading || playersError) {
+    return (
+      <>
+        <Header title={team.name} subtitle={longDate(ref)} />
+        <Main>
+          <div style={{ paddingTop: 24 }}>
+            <Card>
+              {playersError ? (
+                <div className="alert alert--error" role="alert">{playersError}</div>
+              ) : (
+                <Loading label="Chargement de l’effectif…" />
+              )}
+            </Card>
+          </div>
+        </Main>
+      </>
+    );
+  }
+
   return (
     <>
       <Header
@@ -64,14 +84,19 @@ export function CoachDashboard() {
       />
       <Main>
         <div className="hero" style={{ marginTop: 14 }}>
-          <div className="hero__label">Charge moyenne 7 jours</div>
+          <div className="hero__label">
+            Charge moyenne · semaine en cours ({weekLabel(startOfWeek(ref))})
+          </div>
           <div className="hero__value">
-            {formatLoad(summary.avgAcute)}
+            {formatLoad(summary.avgWeekLoad)}
             <span className="hero__unit">UA</span>
           </div>
           <div className="hero__foot">
             {summary.activeCount}/{summary.playerCount} joueurs actifs ·{' '}
             {plural(summary.sessionCount7d, 'séance déclarée', 'séances déclarées')}
+          </div>
+          <div className="hero__foot" style={{ color: 'var(--text-muted)' }}>
+            7 jours glissants : {formatLoad(summary.avgAcute)} UA
           </div>
         </div>
 
@@ -98,7 +123,8 @@ export function CoachDashboard() {
                         {r.player.firstName} {r.player.lastName}
                       </div>
                       <div className="list__sub">
-                        ACWR {formatRatio(r.metrics.acwr)} · {formatLoad(r.metrics.acute)} UA
+                        Ratio {formatRatio(r.metrics.week.ratio)} ·{' '}
+                        {formatLoad(r.metrics.week.current)} UA cette semaine
                       </div>
                     </div>
                     {r.zone && (
@@ -114,19 +140,19 @@ export function CoachDashboard() {
         )}
 
         <Section title="Charge moyenne par semaine">
-          <Card title="Moyenne de l’effectif" hint="8 fenêtres glissantes de 7 jours, en UA">
+          <Card title="Moyenne de l’effectif" hint="8 semaines calendaires (lundi - dimanche), en UA">
             <BarSeriesChart
-              ariaLabel="Charge hebdomadaire moyenne de l’équipe sur 8 semaines, en unités arbitraires"
+              ariaLabel="Charge hebdomadaire moyenne de l’équipe sur 8 semaines calendaires, en unités arbitraires"
               data={weekly.map((w) => ({
-                key: w.end,
-                tick: shortDate(w.end).split(' ')[0],
-                label: `7 jours au ${shortDate(w.end)}`,
+                key: w.start,
+                tick: shortDate(w.start).split(' ')[0],
+                label: `${weekLabel(w.start)}${w.partial ? ' (en cours)' : ''}`,
                 value: w.load,
               }))}
             />
             <TableView
-              columns={['7 jours au', 'Charge moyenne (UA)']}
-              rows={weekly.map((w) => [shortDate(w.end), Math.round(w.load)])}
+              columns={['Semaine', 'Charge moyenne (UA)']}
+              rows={weekly.map((w) => [weekLabel(w.start), Math.round(w.load)])}
             />
           </Card>
         </Section>
@@ -164,7 +190,8 @@ export function CoachDashboard() {
                         {r.player.firstName} {r.player.lastName}
                       </div>
                       <div className="list__sub">
-                        {formatLoad(r.metrics.acute)} UA · ACWR {formatRatio(r.metrics.acwr)}
+                        {formatLoad(r.metrics.week.current)} UA · ratio{' '}
+                        {formatRatio(r.metrics.week.ratio)} · ACWR {formatRatio(r.metrics.acwr)}
                       </div>
                     </div>
                     <div className="list__aside">
@@ -185,10 +212,11 @@ export function CoachDashboard() {
           </Card>
           <TableView
             summary="Voir le tableau de l’effectif"
-            columns={['Joueur', 'Charge 7 j', 'ACWR', 'Séances']}
+            columns={['Joueur', 'Semaine (UA)', 'Ratio', 'ACWR', 'Séances 7 j']}
             rows={sorted.map((r) => [
               `${r.player.lastName} ${r.player.firstName[0]}.`,
-              Math.round(r.metrics.acute),
+              Math.round(r.metrics.week.current),
+              formatRatio(r.metrics.week.ratio),
               formatRatio(r.metrics.acwr),
               String(r.metrics.sessionCount7d),
             ])}

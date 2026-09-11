@@ -1,8 +1,9 @@
-import { useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Header, Main } from '../components/Layout';
 import { useAuth } from '../lib/auth';
 import type { Role } from '../lib/types';
+import { checkEmail, checkPassword } from '../lib/validation';
 
 export function Register() {
   const { register } = useAuth();
@@ -17,17 +18,46 @@ export function Register() {
     inviteCode: '',
   });
   const [error, setError] = useState<string | null>(null);
+  const [confirmSent, setConfirmSent] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Un champ ne signale son erreur qu'une fois quitte (ou apres une tentative
+  // d'envoi) : on ne veut pas crier "invalide" des la premiere lettre tapee.
+  const [touched, setTouched] = useState({ email: false, password: false });
 
   const set = (key: keyof typeof form) => (e: { target: { value: string } }) =>
     setForm((f) => ({ ...f, [key]: e.target.value }));
+  const touch = (key: keyof typeof touched) => () =>
+    setTouched((t) => ({ ...t, [key]: true }));
+
+  const emailCheck = useMemo(() => checkEmail(form.email), [form.email]);
+  const passwordCheck = useMemo(
+    () =>
+      checkPassword(form.password, {
+        email: form.email,
+        firstName: form.firstName,
+        lastName: form.lastName,
+      }),
+    [form.password, form.email, form.firstName, form.lastName],
+  );
+
+  const showEmailError = touched.email && !emailCheck.valid;
+  const showPasswordError = touched.password && !passwordCheck.valid;
+  const canSubmit = emailCheck.valid && passwordCheck.valid && !busy;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
+    setTouched({ email: true, password: true });
+    if (!emailCheck.valid || !passwordCheck.valid) return;
+
     setError(null);
     setBusy(true);
     try {
-      await register({ ...form, role });
+      const { needsEmailConfirmation } = await register({
+        ...form,
+        email: form.email.trim(),
+        role,
+      });
+      if (needsEmailConfirmation) setConfirmSent(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Inscription impossible.');
     } finally {
@@ -35,11 +65,36 @@ export function Register() {
     }
   }
 
+  if (confirmSent) {
+    return (
+      <>
+        <Header title="Vérifie tes e-mails" back />
+        <Main noNav>
+          <div className="stack" style={{ gap: 14, paddingTop: 24 }}>
+            <div className="alert alert--success" role="status">
+              Compte créé. Un e-mail de confirmation vient d’être envoyé à{' '}
+              <strong>{form.email}</strong>.
+            </div>
+            <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+              Confirme ton adresse, puis connecte-toi :{' '}
+              {role === 'coach'
+                ? 'ton équipe sera créée à ce moment-là.'
+                : 'tu rejoindras ton équipe à ce moment-là.'}
+            </p>
+            <Link className="btn" to="/login">
+              Aller à la connexion
+            </Link>
+          </div>
+        </Main>
+      </>
+    );
+  }
+
   return (
     <>
       <Header title="Créer un compte" back />
       <Main noNav>
-        <form className="stack" style={{ gap: 14, paddingTop: 12 }} onSubmit={submit}>
+        <form className="stack" style={{ gap: 14, paddingTop: 12 }} onSubmit={submit} noValidate>
           <div className="field">
             <span className="field__label">Je suis</span>
             <div className="segmented" role="group" aria-label="Type de compte">
@@ -65,13 +120,80 @@ export function Register() {
 
           <div className="field">
             <label className="field__label" htmlFor="email">E-mail</label>
-            <input id="email" className="input" type="email" inputMode="email" autoComplete="email" value={form.email} onChange={set('email')} required />
+            <input
+              id="email"
+              className={`input${showEmailError ? ' input--invalid' : ''}`}
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              value={form.email}
+              onChange={set('email')}
+              onBlur={touch('email')}
+              placeholder="prénom@club.fr"
+              aria-invalid={showEmailError}
+              aria-describedby={showEmailError ? 'email-error' : undefined}
+              required
+            />
+            {showEmailError && (
+              <span className="field__error" id="email-error" role="alert">
+                {emailCheck.error}
+              </span>
+            )}
+            {emailCheck.suggestion && (
+              <button
+                type="button"
+                className="field__suggestion"
+                onClick={() => setForm((f) => ({ ...f, email: emailCheck.suggestion as string }))}
+              >
+                Tu voulais dire <strong>{emailCheck.suggestion}</strong> ?
+              </button>
+            )}
           </div>
 
           <div className="field">
             <label className="field__label" htmlFor="password">Mot de passe</label>
-            <input id="password" className="input" type="password" autoComplete="new-password" value={form.password} onChange={set('password')} required />
-            <span className="field__hint">6 caractères minimum.</span>
+            <input
+              id="password"
+              className={`input${showPasswordError ? ' input--invalid' : ''}`}
+              type="password"
+              autoComplete="new-password"
+              value={form.password}
+              onChange={set('password')}
+              onBlur={touch('password')}
+              aria-invalid={showPasswordError}
+              aria-describedby="password-rules"
+              required
+            />
+
+            {form.password && (
+              <div className="pwstrength">
+                <div className="pwstrength__bars" aria-hidden="true">
+                  {[1, 2, 3, 4].map((i) => (
+                    <span
+                      key={i}
+                      className="pwstrength__bar"
+                      data-on={i <= passwordCheck.score ? passwordCheck.score : 0}
+                    />
+                  ))}
+                </div>
+                <span className="pwstrength__label" role="status">
+                  Robustesse : {passwordCheck.strengthLabel}
+                </span>
+              </div>
+            )}
+
+            <ul className="pwrules" id="password-rules">
+              {passwordCheck.rules.map((rule) => (
+                <li key={rule.id} className="pwrules__item" data-met={rule.met}>
+                  <span className="pwrules__mark" aria-hidden="true">{rule.met ? '✓' : '·'}</span>
+                  {rule.label}
+                </li>
+              ))}
+            </ul>
+
+            {showPasswordError && passwordCheck.rules.every((r) => r.met) && (
+              <span className="field__error" role="alert">{passwordCheck.error}</span>
+            )}
           </div>
 
           {role === 'player' ? (
@@ -105,7 +227,7 @@ export function Register() {
 
           {error && <div className="alert alert--error" role="alert">{error}</div>}
 
-          <button className="btn" type="submit" disabled={busy}>
+          <button className="btn" type="submit" disabled={!canSubmit}>
             {busy ? 'Création...' : 'Créer mon compte'}
           </button>
         </form>

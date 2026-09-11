@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Navigate, useParams } from 'react-router-dom';
 import { Header, Main } from '../../components/Layout';
 import { LoadDashboard } from '../../components/LoadDashboard';
-import { Avatar, Card, EmptyState, Section, rpeVars } from '../../components/ui';
+import { Avatar, Card, EmptyState, Loading, Section, rpeVars } from '../../components/ui';
 import { useAuth } from '../../lib/auth';
 import { longDate, today } from '../../lib/date';
 import { useTeamPlayers, useTeamSessions } from '../../lib/hooks';
@@ -13,8 +13,9 @@ import { SESSION_TYPES } from '../../lib/types';
 export function PlayerDetail() {
   const { playerId } = useParams();
   const { team } = useAuth();
-  const players = useTeamPlayers(team?.id);
-  const sessionsByPlayer = useTeamSessions(team?.id);
+  const { data: players, loading: playersLoading } = useTeamPlayers(team?.id);
+  const { data: sessionsByPlayer, loading: sessionsLoading } = useTeamSessions(team?.id);
+  const loading = playersLoading || sessionsLoading;
   const ref = today();
 
   const rows = useMemo(
@@ -23,6 +24,21 @@ export function PlayerDetail() {
   );
   const row = rows.find((r) => r.player.id === playerId);
   const summary = useMemo(() => summarizeTeam(rows), [rows]);
+
+  // L'effectif arrive de façon asynchrone : sans cette attente, la fiche
+  // renverrait vers la liste avant même d'avoir pu trouver le joueur.
+  if (loading) {
+    return (
+      <>
+        <Header title="Fiche joueur" back />
+        <Main>
+          <div style={{ paddingTop: 24 }}>
+            <Card><Loading /></Card>
+          </div>
+        </Main>
+      </>
+    );
+  }
 
   // Un coach ne voit que les joueurs de sa propre équipe.
   if (!row) return <Navigate to="/coach" replace />;
@@ -42,7 +58,7 @@ export function PlayerDetail() {
           <LoadDashboard
             sessions={row.sessions}
             referenceDate={ref}
-            teamAcute={summary.avgAcute}
+            teamWeekLoad={summary.avgWeekLoad}
           />
         </div>
 
