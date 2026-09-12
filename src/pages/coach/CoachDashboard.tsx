@@ -9,7 +9,7 @@ import { IconChevron } from '../../components/icons';
 import { useAuth } from '../../lib/auth';
 import { longDate, shortDate, startOfWeek, today, weekLabel } from '../../lib/date';
 import { useTeamPlayers, useTeamSessions } from '../../lib/hooks';
-import { buildTeamRows, sortRows, summarizeTeam, teamWeeklyAverage, type SortKey } from '../../lib/team';
+import { acuteByPlayer, buildTeamRows, sortRows, summarizeTeam, teamWeeklyAverage, type SortKey } from '../../lib/team';
 
 const SORTS: { key: SortKey; label: string }[] = [
   { key: 'load', label: 'Charge' },
@@ -31,6 +31,7 @@ export function CoachDashboard() {
   );
   const summary = useMemo(() => summarizeTeam(rows), [rows]);
   const weekly = useMemo(() => teamWeeklyAverage(rows, ref, 8), [rows, ref]);
+  const acute = useMemo(() => acuteByPlayer(rows), [rows]);
   const sorted = useMemo(() => sortRows(rows, sort), [rows, sort]);
 
   if (!user) return null;
@@ -95,10 +96,31 @@ export function CoachDashboard() {
             {summary.activeCount}/{summary.playerCount} joueurs actifs ·{' '}
             {plural(summary.sessionCount7d, 'séance déclarée', 'séances déclarées')}
           </div>
-          <div className="hero__foot" style={{ color: 'var(--text-muted)' }}>
-            7 jours glissants : {formatLoad(summary.avgAcute)} UA
-          </div>
         </div>
+
+        {rows.length > 0 && (
+          <Section title="Charge des 7 derniers jours">
+            <Card title="Par joueur" hint="7 jours glissants, en UA">
+              <BarSeriesChart
+                ariaLabel="Charge des 7 derniers jours glissants, joueur par joueur, en unités arbitraires"
+                data={acute.map((a) => ({
+                  key: a.player.id,
+                  tick: a.player.lastName.slice(0, 5),
+                  label: `${a.player.firstName} ${a.player.lastName}`,
+                  value: a.acute,
+                }))}
+              />
+              <TableView
+                columns={['Joueur', 'Charge 7 j (UA)', 'Séances']}
+                rows={acute.map((a) => [
+                  `${a.player.lastName} ${a.player.firstName[0] ?? ''}.`,
+                  Math.round(a.acute),
+                  String(a.sessionCount7d),
+                ])}
+              />
+            </Card>
+          </Section>
+        )}
 
         <Section title="Suivi de l’effectif">
           <div className="grid-2">

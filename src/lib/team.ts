@@ -49,8 +49,6 @@ export interface TeamSummary {
   sessionCount7d: number;
   /** Charge moyenne de l’effectif sur la semaine calendaire en cours, en UA. */
   avgWeekLoad: number;
-  /** Charge moyenne sur 7 jours glissants, en UA. */
-  avgAcute: number;
   alerts: PlayerRow[];
 }
 
@@ -63,7 +61,6 @@ export function summarizeTeam(rows: PlayerRow[]): TeamSummary {
     activeCount: active.length,
     sessionCount7d: rows.reduce((a, r) => a + r.metrics.sessionCount7d, 0),
     avgWeekLoad: avg((r) => r.metrics.week.current),
-    avgAcute: avg((r) => r.metrics.acute),
     alerts: rows.filter((r) => r.zone && r.zone.zone !== 'optimal'),
   };
 }
@@ -97,4 +94,26 @@ export function teamWeeklyAverage(
     partial: week.partial,
     load: perPlayer.reduce((a, series) => a + series[i].load, 0) / rows.length,
   }));
+}
+
+export interface PlayerAcute {
+  player: PublicUser;
+  /** Charge des 7 derniers jours glissants, en UA. */
+  acute: number;
+  sessionCount7d: number;
+}
+
+/**
+ * Charge des 7 derniers jours, joueur par joueur, du plus charge au moins
+ * charge. Les joueurs sans saisie restent dans la liste, a zero : cote staff,
+ * une absence de declaration est une information, pas une ligne a masquer.
+ */
+export function acuteByPlayer(rows: PlayerRow[]): PlayerAcute[] {
+  return rows
+    .map((r) => ({
+      player: r.player,
+      acute: r.metrics.acute,
+      sessionCount7d: r.metrics.sessionCount7d,
+    }))
+    .sort((a, b) => b.acute - a.acute);
 }
