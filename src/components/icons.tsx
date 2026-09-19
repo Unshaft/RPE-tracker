@@ -62,3 +62,12 @@ export const IconChart = (p: IconProps) => (
     <path d="M4 20V10M10 20V4M16 20v-6M22 20H2" />
   </svg>
 );
+
+/** Réglages : curseurs, pour la configuration des modèles de charge. */
+export const IconSliders = (p: IconProps) => (
+  <svg {...base} {...p}>
+    <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />
+    <circle cx="16" cy="7" r="2" />
+    <circle cx="10" cy="17" r="2" />
+  </svg>
+);

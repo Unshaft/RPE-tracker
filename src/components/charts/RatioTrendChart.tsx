@@ -1,7 +1,14 @@
 import { useState } from 'react';
 import { shortDate } from '../../lib/date';
 import { acwrZone } from '../../lib/metrics';
-import { formatLoad, formatRatio, linePath, useMeasure } from './chartUtils';
+import {
+  chartHeight,
+  formatLoad,
+  formatRatio,
+  labelStep,
+  linePath,
+  useMeasure,
+} from './chartUtils';
 
 export interface RatioPoint {
   /** Lundi de la semaine. */
@@ -48,7 +55,10 @@ export function RatioTrendChart({ data }: { data: RatioPoint[] }) {
   const { ref, width } = useMeasure<HTMLDivElement>();
   const [active, setActive] = useState<number | null>(null);
 
-  const height = 236;
+  // Huit semaines sur 380 px de haut, ce n'est plus la meme courbe qu'un
+  // aplat de 236 px : les inflexions d'une semaine a l'autre redeviennent
+  // visibles. La borne basse est celle du telephone, a ne pas descendre.
+  const height = chartHeight(width, 0.5, 236, 380);
   const padLeft = 32;
   const padRight = 12;
   const padTop = 12;
@@ -80,6 +90,7 @@ export function RatioTrendChart({ data }: { data: RatioPoint[] }) {
 
   const point = active !== null ? data[active] : null;
   const pointZone = point ? acwrZone(point.ratio) : null;
+  const tickEvery = labelStep(data.length, plotW, 64);
 
   return (
     <div className="chart" ref={ref}>
@@ -181,7 +192,7 @@ export function RatioTrendChart({ data }: { data: RatioPoint[] }) {
 
           <g className="chart__tick" textAnchor="middle">
             {data.map((d, i) =>
-              i % 2 === 0 ? (
+              i % tickEvery === 0 ? (
                 <text key={d.start} x={x(i)} y={height - 6}>
                   {shortDate(d.start)}
                 </text>
@@ -194,7 +205,10 @@ export function RatioTrendChart({ data }: { data: RatioPoint[] }) {
       {point && (
         <div
           className="tooltip"
-          style={{ left: Math.min(Math.max(x(active!), 80), Math.max(80, width - 80)), top: padTop - 4 }}
+          style={{
+            left: Math.min(Math.max(x(active!), 80), Math.max(80, width - 80)),
+            top: padTop - 4,
+          }}
         >
           <div className="tooltip__muted">
             {shortDate(point.start)} - {shortDate(point.end)}
@@ -215,7 +229,9 @@ export function RatioTrendChart({ data }: { data: RatioPoint[] }) {
           <span className="chart-legend__item" key={b.label}>
             <span
               className="chart-legend__swatch"
-              style={{ background: `color-mix(in srgb, var(--status-${b.status}) 40%, transparent)` }}
+              style={{
+                background: `color-mix(in srgb, var(--status-${b.status}) 40%, transparent)`,
+              }}
             />
             {b.label}
           </span>

@@ -2,6 +2,12 @@
    Tokens — palette data-viz validee (CVD-safe), declinee light / dark.
    Les valeurs sombres sont declarees deux fois : media query (reglage OS)
    et scope [data-theme] (bascule dans l'app), qui doit gagner dans les deux sens.
+
+   « CVD-safe » n'est pas une intention mais un controle : `npm run validate:palette`
+   (scripts/validate_palette.js) rejoue contrastes WCAG, regularite de la rampe
+   ordinale et simulation des trois dichromatismes, et tourne en CI. Toute
+   retouche de couleur ici se relit avec ce script — zero echec, zero
+   avertissement — avant d'etre commitee.
    ========================================================================== */
 
 :root {
@@ -15,7 +21,7 @@
 
   --text-primary: #17120f;
   --text-secondary: #5b524c;
-  --text-muted: #8d8579;
+  --text-muted: #8a8276;
   --text-invert: #f7f4ec;
 
   --border: rgba(23, 18, 15, 0.1);
@@ -23,11 +29,17 @@
   --grid: #e4dece;
   --baseline: #c7bfab;
 
-  --series-1: #2a78d6;
-  --series-2: #eb6834;
-  --series-3: #1baf7a;
-  --series-4: #eda100;
-  --series-5: #e87ba4;
+  /* Series data-viz. Sur creme, une couleur doit descendre sous une luminance
+     de 0,27 pour tenir le 3:1 des objets graphiques (WCAG 1.4.11) : l'ambre et
+     le rose d'origine ne le pouvaient pas sans virer au bronze et au vieux
+     rose. Ce que le dichromate lit ensuite, ce n'est plus la teinte mais
+     l'ecart de clarte — c'est donc l'etagement des clartes, et non la
+     saturation, qui porte ici la distinguabilite. */
+  --series-1: #2170cd;
+  --series-2: #e5632e;
+  --series-3: #009d6b;
+  --series-4: #8d5e00;
+  --series-5: #c77291;
 
   --status-good: #0ca30c;
   --status-warning: #fab219;
@@ -38,20 +50,27 @@
   --status-serious-ink: #a1441c;
   --status-critical-ink: #b02a2a;
 
-  /* Rouge CBN. Attention : proche de --status-critical, voir la note en tete
-     de la section "Statuts" — le rouge porte donc deux roles (marque + risque). */
-  --accent: #e2231a;
+  /* Rouge CBN, assombri pour que les liens tiennent le 4,5:1 jusque sur
+     --surface-inset, la plus foncee des quatre surfaces claires. Attention :
+     il reste proche de --status-critical (#d03b3b), donc le rouge porte deux
+     roles a la fois (marque + risque) — a trancher avec le de-brandage. */
+  --accent: #cc1912;
   --accent-deep: #b5170f;
   --accent-soft: #fbe4e1;
   --accent-ink: #ffffff;
 
   /* Rampe ordinale RPE : 5 paliers d'intensite, une seule teinte, ecarts de
      clarte valides (scripts/validate_palette.js --ordinal). */
-  --rpe-1: #86b6ef; --rpe-ink-1: #0b0b0b;
-  --rpe-2: #5598e7; --rpe-ink-2: #0b0b0b;
-  --rpe-3: #2a78d6; --rpe-ink-3: #ffffff;
-  --rpe-4: #1c5cab; --rpe-ink-4: #ffffff;
-  --rpe-5: #0d366b; --rpe-ink-5: #ffffff;
+  --rpe-1: #86b6ef;
+  --rpe-ink-1: #0b0b0b;
+  --rpe-2: #5598e7;
+  --rpe-ink-2: #0b0b0b;
+  --rpe-3: #2170cd;
+  --rpe-ink-3: #ffffff;
+  --rpe-4: #1c5cab;
+  --rpe-ink-4: #ffffff;
+  --rpe-5: #0d366b;
+  --rpe-ink-5: #ffffff;
 
   --radius-sm: 8px;
   --radius: 14px;
@@ -62,8 +81,23 @@
   --font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --nav-height: 62px;
+  /* Rail lateral du coach : 232 px tiennent le plus long libelle d'onglet
+     (« Modèles de charge ») sans coupure, icone comprise. */
+  --rail-width: 232px;
 }
 
+/* Theme sombre — les deux declarations qui suivent doivent rester identiques au
+   caractere pres ; le script de palette le verifie. Trois ecarts avec le clair
+   meritent d'etre connus avant d'y toucher :
+
+   - les series y sont eclaircies plutot qu'assombries, et surtout re-etagees en
+     clarte : la version precedente les avait toutes ramenees a la meme clarte,
+     ce qui les rendait indiscernables sous tritanopie et deuteranopie ;
+   - --rpe-ink-3 passe a l'encre foncee. La rampe monte en clarte ici alors
+     qu'elle descend en clair, donc le point de bascule de l'encre se situe au
+     meme palier 3 dans les deux themes, par symetrie et non par exception ;
+   - --accent-deep est eclairci : l'encre posee dessus est foncee en sombre,
+     donc « plus profond » y joue contre la lisibilite et non pour elle. */
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme='light'])) {
     color-scheme: dark;
@@ -79,25 +113,30 @@
     --border-strong: rgba(247, 244, 236, 0.2);
     --grid: #2b221d;
     --baseline: #3a2e26;
-    --series-1: #3987e5;
-    --series-2: #d95926;
-    --series-3: #199e70;
-    --series-4: #c98500;
-    --series-5: #d55181;
+    --series-1: #3a88e6;
+    --series-2: #dc5c29;
+    --series-3: #4bb287;
+    --series-4: #d79632;
+    --series-5: #b65c79;
     --status-good-ink: #0ca30c;
     --status-warning-ink: #fab219;
     --status-serious-ink: #ec835a;
     --status-critical-ink: #e07070;
     --accent: #f4564d;
-    --accent-deep: #e2231a;
+    --accent-deep: #f1362a;
     --accent-soft: #3a1b18;
     --accent-ink: #17120f;
 
-    --rpe-1: #184f95; --rpe-ink-1: #ffffff;
-    --rpe-2: #256abf; --rpe-ink-2: #ffffff;
-    --rpe-3: #3987e5; --rpe-ink-3: #ffffff;
-    --rpe-4: #6da7ec; --rpe-ink-4: #0b0b0b;
-    --rpe-5: #b7d3f6; --rpe-ink-5: #0b0b0b;
+    --rpe-1: #184f95;
+    --rpe-ink-1: #ffffff;
+    --rpe-2: #256abf;
+    --rpe-ink-2: #ffffff;
+    --rpe-3: #3a88e6;
+    --rpe-ink-3: #0b0b0b;
+    --rpe-4: #6da7ec;
+    --rpe-ink-4: #0b0b0b;
+    --rpe-5: #b7d3f6;
+    --rpe-ink-5: #0b0b0b;
     --shadow-card: none;
     --shadow-float: 0 8px 24px rgba(0, 0, 0, 0.5);
   }
@@ -117,25 +156,30 @@
   --border-strong: rgba(247, 244, 236, 0.2);
   --grid: #2b221d;
   --baseline: #3a2e26;
-  --series-1: #3987e5;
-  --series-2: #d95926;
-  --series-3: #199e70;
-  --series-4: #c98500;
-  --series-5: #d55181;
+  --series-1: #3a88e6;
+  --series-2: #dc5c29;
+  --series-3: #4bb287;
+  --series-4: #d79632;
+  --series-5: #b65c79;
   --status-good-ink: #0ca30c;
   --status-warning-ink: #fab219;
   --status-serious-ink: #ec835a;
   --status-critical-ink: #e07070;
   --accent: #f4564d;
-  --accent-deep: #e2231a;
+  --accent-deep: #f1362a;
   --accent-soft: #3a1b18;
   --accent-ink: #17120f;
 
-  --rpe-1: #184f95; --rpe-ink-1: #ffffff;
-  --rpe-2: #256abf; --rpe-ink-2: #ffffff;
-  --rpe-3: #3987e5; --rpe-ink-3: #ffffff;
-  --rpe-4: #6da7ec; --rpe-ink-4: #0b0b0b;
-  --rpe-5: #b7d3f6; --rpe-ink-5: #0b0b0b;
+  --rpe-1: #184f95;
+  --rpe-ink-1: #ffffff;
+  --rpe-2: #256abf;
+  --rpe-ink-2: #ffffff;
+  --rpe-3: #3a88e6;
+  --rpe-ink-3: #0b0b0b;
+  --rpe-4: #6da7ec;
+  --rpe-ink-4: #0b0b0b;
+  --rpe-5: #b7d3f6;
+  --rpe-ink-5: #0b0b0b;
   --shadow-card: none;
   --shadow-float: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
@@ -146,9 +190,15 @@
 
 *,
 *::before,
-*::after { box-sizing: border-box; }
+*::after {
+  box-sizing: border-box;
+}
 
-html, body, #root { height: 100%; }
+html,
+body,
+#root {
+  height: 100%;
+}
 
 body {
   margin: 0;
@@ -161,11 +211,29 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-h1, h2, h3, h4, p, figure { margin: 0; }
-button, input, select, textarea { font: inherit; color: inherit; }
-a { color: var(--accent); text-decoration: none; }
+h1,
+h2,
+h3,
+h4,
+p,
+figure {
+  margin: 0;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
 
-::selection { background: color-mix(in srgb, var(--accent) 25%, transparent); }
+::selection {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+}
 
 :focus-visible {
   outline: 2px solid var(--accent);
@@ -174,8 +242,34 @@ a { color: var(--accent); text-decoration: none; }
 }
 
 /* ==========================================================================
-   Shell mobile — l'app est concue pour le telephone ; sur grand ecran elle
-   reste dans une colonne de largeur telephone, posee sur le plan de page.
+   Points de rupture — quatre seuils, une raison chacun.
+
+   L'application sert deux materiels distincts et le decoupage suit cette
+   realite plutot qu'une grille generique. Le role est porte par
+   `.app-shell[data-layout]` (« player », « coach », « public ») : c'est lui,
+   et non la seule largeur, qui decide de la mise en page.
+
+   - < 700 px  : telephone. Ecran de reference du produit, celui du joueur dans
+                 le vestiaire. Aucune media query ne le touche : tout ce qui
+                 suit s'ajoute, rien ne se retire.
+   - >= 700 px : la colonne de 440 px ne remplit plus la fenetre (440 + 2x130
+                 de plan visible). En dessous, l'encadrer ne montrerait qu'un
+                 filet ; au-dessus, elle a besoin d'etre posee quelque part.
+   - >= 900 px : le coach bascule en mise en page de bureau. Un rail de 232 px
+                 laisse encore ~640 px de contenu, largeur minimale pour deux
+                 cartes cote a cote. C'est aussi la tablette en paysage, ou la
+                 barre d'onglets basse n'a plus de sens : loin du pouce comme
+                 de la souris.
+   - >= 1180 px: deux colonnes de contenu. Rail (232) + gouttieres (48)
+                 laissent ~900 px, soit 2 x 430 — largeur sous laquelle une
+                 courbe de 8 semaines redevient illisible. Cible : portable 13".
+   - >= 1500 px: plafond. Le contenu cesse de s'etirer (1400 px), les tuiles
+                 passent a quatre colonnes, les graphiques gagnent en hauteur.
+                 Au-dela, elargir encore n'ajoute plus d'information.
+
+   Le joueur ne franchit que le premier seuil : ses ecrans restent une colonne
+   etroite a toutes les tailles. C'est un choix d'ergonomie — une saisie de
+   vestiaire se fait au pouce, sur une cible large, pas sur une ligne de 1400 px.
    ========================================================================== */
 
 .app-shell {
@@ -190,17 +284,23 @@ a { color: var(--accent); text-decoration: none; }
   overflow-x: hidden;
 }
 
+/* La colonne etroite posee sur le plan de page. L'ancienne « maquette de
+   telephone » (coins arrondis, ombre portee, hauteur plafonnee a 880 px) a ete
+   retiree : elle plafonnait la surface utile sur un portable et forcait un
+   second ascenseur, pour mimer un materiel que l'utilisateur a deja en main.
+   Restent deux filets verticaux, qui disent la meme chose — « cette colonne
+   est volontairement etroite » — sans rien couter en hauteur. */
 @media (min-width: 700px) {
-  body { background: var(--surface-inset); padding: 24px 0; }
-  .app-shell {
-    min-height: min(880px, calc(100dvh - 48px));
-    height: min(880px, calc(100dvh - 48px));
-    border-radius: 28px;
-    border: 1px solid var(--border);
-    box-shadow: var(--shadow-float);
-    overflow: hidden;
+  body {
+    background: var(--surface-inset);
   }
-  .app-main { overscroll-behavior: contain; }
+  .app-shell {
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+  }
+  .app-main {
+    overscroll-behavior: contain;
+  }
 }
 
 .app-main {
@@ -210,7 +310,9 @@ a { color: var(--accent); text-decoration: none; }
   scroll-behavior: smooth;
 }
 
-.app-main--no-nav { padding-bottom: 32px; }
+.app-main--no-nav {
+  padding-bottom: 32px;
+}
 
 /* ==========================================================================
    En-tete
@@ -229,9 +331,18 @@ a { color: var(--accent); text-decoration: none; }
   border-bottom: 1px solid var(--border);
 }
 
-.app-header__title { font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
-.app-header__sub { font-size: 12.5px; color: var(--text-muted); }
-.app-header__spacer { flex: 1; }
+.app-header__title {
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.app-header__sub {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.app-header__spacer {
+  flex: 1;
+}
 
 .icon-btn {
   display: inline-flex;
@@ -248,7 +359,9 @@ a { color: var(--accent); text-decoration: none; }
   font-weight: 600;
   cursor: pointer;
 }
-.icon-btn:active { transform: scale(0.96); }
+.icon-btn:active {
+  transform: scale(0.96);
+}
 
 .avatar {
   display: inline-flex;
@@ -265,7 +378,11 @@ a { color: var(--accent); text-decoration: none; }
   letter-spacing: 0.02em;
   color: var(--text-secondary);
 }
-.avatar--lg { width: 56px; height: 56px; font-size: 18px; }
+.avatar--lg {
+  width: 56px;
+  height: 56px;
+  font-size: 18px;
+}
 
 /* ==========================================================================
    Navigation basse
@@ -300,14 +417,21 @@ a { color: var(--accent); text-decoration: none; }
   font-weight: 600;
   letter-spacing: 0.01em;
 }
-.bottom-nav__item svg { width: 22px; height: 22px; }
-.bottom-nav__item[aria-current='page'] { color: var(--accent); }
+.bottom-nav__item svg {
+  width: 22px;
+  height: 22px;
+}
+.bottom-nav__item[aria-current='page'] {
+  color: var(--accent);
+}
 
 /* ==========================================================================
    Cartes & structure
    ========================================================================== */
 
-.section { margin-top: 20px; }
+.section {
+  margin-top: 20px;
+}
 .section__head {
   display: flex;
   align-items: baseline;
@@ -316,9 +440,30 @@ a { color: var(--accent); text-decoration: none; }
   margin-bottom: 8px;
   padding: 0 2px;
 }
-.section__title { font-size: 13px; font-weight: 650; letter-spacing: 0.02em; text-transform: uppercase; color: var(--text-muted); white-space: nowrap; }
-.section__meta { font-size: 12px; color: var(--text-muted); font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.section__action { font-size: 13px; font-weight: 600; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; }
+.section__title {
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.section__meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.section__action {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
 
 .card {
   background: var(--surface-1);
@@ -327,17 +472,48 @@ a { color: var(--accent); text-decoration: none; }
   padding: 14px;
   box-shadow: var(--shadow-card);
 }
-.card--flush { padding: 0; overflow: hidden; }
+.card--flush {
+  padding: 0;
+  overflow: hidden;
+}
 
-.card__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
-.card__title { font-size: 14px; font-weight: 650; }
-.card__hint { font-size: 12px; color: var(--text-muted); }
+.card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.card__title {
+  font-size: 14px;
+  font-weight: 650;
+}
+.card__hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
 
-.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.stack { display: flex; flex-direction: column; gap: 10px; }
-.row { display: flex; align-items: center; gap: 10px; }
-.row--between { justify-content: space-between; }
-.wrap { flex-wrap: wrap; }
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.row--between {
+  justify-content: space-between;
+}
+.wrap {
+  flex-wrap: wrap;
+}
 
 /* ==========================================================================
    Chiffres & tuiles
@@ -350,10 +526,32 @@ a { color: var(--accent); text-decoration: none; }
   padding: 16px;
   box-shadow: var(--shadow-card);
 }
-.hero__label { font-size: 12.5px; color: var(--text-muted); font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; }
-.hero__value { font-size: 40px; font-weight: 680; letter-spacing: -0.03em; line-height: 1.05; margin-top: 2px; }
-.hero__unit { font-size: 15px; font-weight: 600; color: var(--text-muted); margin-left: 6px; letter-spacing: 0; }
-.hero__foot { margin-top: 6px; font-size: 13px; color: var(--text-secondary); }
+.hero__label {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.hero__value {
+  font-size: 40px;
+  font-weight: 680;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  margin-top: 2px;
+}
+.hero__unit {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-left: 6px;
+  letter-spacing: 0;
+}
+.hero__foot {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
 
 .tile {
   background: var(--surface-1);
@@ -366,14 +564,36 @@ a { color: var(--accent); text-decoration: none; }
   gap: 2px;
   min-width: 0;
 }
-.tile__label { font-size: 11.5px; font-weight: 600; color: var(--text-muted); letter-spacing: 0.02em; text-transform: uppercase; }
-.tile__value { font-size: 24px; font-weight: 660; letter-spacing: -0.02em; }
-.tile__hint { font-size: 12px; color: var(--text-muted); }
+.tile__label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.tile__value {
+  font-size: 24px;
+  font-weight: 660;
+  letter-spacing: -0.02em;
+}
+.tile__hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
 
-.delta { font-size: 13px; font-weight: 600; }
-.delta--up { color: var(--status-critical-ink); }
-.delta--down { color: var(--status-good-ink); }
-.delta--flat { color: var(--text-muted); }
+.delta {
+  font-size: 13px;
+  font-weight: 600;
+}
+.delta--up {
+  color: var(--status-critical-ink);
+}
+.delta--down {
+  color: var(--status-good-ink);
+}
+.delta--flat {
+  color: var(--text-muted);
+}
 
 /* ==========================================================================
    Badges de statut — jamais la couleur seule : icone + libelle.
@@ -390,12 +610,35 @@ a { color: var(--accent); text-decoration: none; }
   border: 1px solid transparent;
   white-space: nowrap;
 }
-.badge__icon { font-size: 11px; line-height: 1; }
-.badge--good { color: var(--status-good-ink); background: color-mix(in srgb, var(--status-good) 14%, transparent); border-color: color-mix(in srgb, var(--status-good) 32%, transparent); }
-.badge--warning { color: var(--status-warning-ink); background: color-mix(in srgb, var(--status-warning) 18%, transparent); border-color: color-mix(in srgb, var(--status-warning) 40%, transparent); }
-.badge--serious { color: var(--status-serious-ink); background: color-mix(in srgb, var(--status-serious) 18%, transparent); border-color: color-mix(in srgb, var(--status-serious) 40%, transparent); }
-.badge--critical { color: var(--status-critical-ink); background: color-mix(in srgb, var(--status-critical) 14%, transparent); border-color: color-mix(in srgb, var(--status-critical) 34%, transparent); }
-.badge--neutral { color: var(--text-secondary); background: var(--surface-2); border-color: var(--border); }
+.badge__icon {
+  font-size: 11px;
+  line-height: 1;
+}
+.badge--good {
+  color: var(--status-good-ink);
+  background: color-mix(in srgb, var(--status-good) 14%, transparent);
+  border-color: color-mix(in srgb, var(--status-good) 32%, transparent);
+}
+.badge--warning {
+  color: var(--status-warning-ink);
+  background: color-mix(in srgb, var(--status-warning) 18%, transparent);
+  border-color: color-mix(in srgb, var(--status-warning) 40%, transparent);
+}
+.badge--serious {
+  color: var(--status-serious-ink);
+  background: color-mix(in srgb, var(--status-serious) 18%, transparent);
+  border-color: color-mix(in srgb, var(--status-serious) 40%, transparent);
+}
+.badge--critical {
+  color: var(--status-critical-ink);
+  background: color-mix(in srgb, var(--status-critical) 14%, transparent);
+  border-color: color-mix(in srgb, var(--status-critical) 34%, transparent);
+}
+.badge--neutral {
+  color: var(--text-secondary);
+  background: var(--surface-2);
+  border-color: var(--border);
+}
 
 .tag {
   display: inline-flex;
@@ -413,9 +656,20 @@ a { color: var(--accent); text-decoration: none; }
    Formulaires
    ========================================================================== */
 
-.field { display: flex; flex-direction: column; gap: 6px; }
-.field__label { font-size: 12.5px; font-weight: 640; color: var(--text-secondary); }
-.field__hint { font-size: 12px; color: var(--text-muted); }
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.field__label {
+  font-size: 12.5px;
+  font-weight: 640;
+  color: var(--text-secondary);
+}
+.field__hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
 
 .input {
   width: 100%;
@@ -426,9 +680,21 @@ a { color: var(--accent); text-decoration: none; }
   background: var(--surface-1);
   font-size: 16px; /* >= 16px : evite le zoom auto sur iOS */
 }
-textarea.input { height: auto; min-height: 78px; padding: 11px 13px; resize: vertical; line-height: 1.4; }
-.input::placeholder { color: var(--text-muted); }
-.input:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+textarea.input {
+  height: auto;
+  min-height: 78px;
+  padding: 11px 13px;
+  resize: vertical;
+  line-height: 1.4;
+}
+.input::placeholder {
+  color: var(--text-muted);
+}
+.input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+  border-color: transparent;
+}
 
 .btn {
   display: inline-flex;
@@ -446,12 +712,34 @@ textarea.input { height: auto; min-height: 78px; padding: 11px 13px; resize: ver
   cursor: pointer;
   width: 100%;
 }
-.btn:active { transform: scale(0.99); }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn--ghost { background: var(--surface-1); color: var(--text-primary); border-color: var(--border-strong); }
-.btn--quiet { background: transparent; color: var(--text-secondary); border-color: var(--border); }
-.btn--danger { background: transparent; color: var(--status-critical-ink); border-color: color-mix(in srgb, var(--status-critical) 40%, transparent); }
-.btn--sm { min-height: 38px; font-size: 13.5px; padding: 0 14px; width: auto; }
+.btn:active {
+  transform: scale(0.99);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn--ghost {
+  background: var(--surface-1);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+.btn--quiet {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: var(--border);
+}
+.btn--danger {
+  background: transparent;
+  color: var(--status-critical-ink);
+  border-color: color-mix(in srgb, var(--status-critical) 40%, transparent);
+}
+.btn--sm {
+  min-height: 38px;
+  font-size: 13.5px;
+  padding: 0 14px;
+  width: auto;
+}
 
 .segmented {
   display: grid;
@@ -479,7 +767,11 @@ textarea.input { height: auto; min-height: 78px; padding: 11px 13px; resize: ver
   box-shadow: var(--shadow-card);
 }
 
-.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .chip {
   min-height: 40px;
   padding: 0 14px;
@@ -497,7 +789,11 @@ textarea.input { height: auto; min-height: 78px; padding: 11px 13px; resize: ver
   color: var(--surface-1);
 }
 
-.stepper { display: flex; align-items: center; gap: 10px; }
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 .stepper__btn {
   width: 46px;
   height: 46px;
@@ -509,8 +805,19 @@ textarea.input { height: auto; min-height: 78px; padding: 11px 13px; resize: ver
   font-weight: 600;
   cursor: pointer;
 }
-.stepper__value { flex: 1; text-align: center; font-size: 26px; font-weight: 660; letter-spacing: -0.02em; }
-.stepper__value small { font-size: 14px; font-weight: 600; color: var(--text-muted); margin-left: 4px; }
+.stepper__value {
+  flex: 1;
+  text-align: center;
+  font-size: 26px;
+  font-weight: 660;
+  letter-spacing: -0.02em;
+}
+.stepper__value small {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-left: 4px;
+}
 
 .alert {
   padding: 11px 13px;
@@ -518,15 +825,30 @@ textarea.input { height: auto; min-height: 78px; padding: 11px 13px; resize: ver
   font-size: 13.5px;
   border: 1px solid;
 }
-.alert--error { color: var(--status-critical-ink); background: color-mix(in srgb, var(--status-critical) 10%, transparent); border-color: color-mix(in srgb, var(--status-critical) 32%, transparent); }
-.alert--info { color: var(--text-secondary); background: var(--surface-2); border-color: var(--border); }
-.alert--success { color: var(--status-good-ink); background: color-mix(in srgb, var(--status-good) 12%, transparent); border-color: color-mix(in srgb, var(--status-good) 32%, transparent); }
+.alert--error {
+  color: var(--status-critical-ink);
+  background: color-mix(in srgb, var(--status-critical) 10%, transparent);
+  border-color: color-mix(in srgb, var(--status-critical) 32%, transparent);
+}
+.alert--info {
+  color: var(--text-secondary);
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+.alert--success {
+  color: var(--status-good-ink);
+  background: color-mix(in srgb, var(--status-good) 12%, transparent);
+  border-color: color-mix(in srgb, var(--status-good) 32%, transparent);
+}
 
 /* ==========================================================================
    Listes
    ========================================================================== */
 
-.list { display: flex; flex-direction: column; }
+.list {
+  display: flex;
+  flex-direction: column;
+}
 .list__row {
   display: flex;
   align-items: center;
@@ -540,14 +862,46 @@ textarea.input { height: auto; min-height: 78px; padding: 11px 13px; resize: ver
   cursor: pointer;
   color: inherit;
 }
-.list__row:last-child { border-bottom: 0; }
-.list__row:active { background: var(--surface-2); }
-.list__body { flex: 1; min-width: 0; }
-.list__title { font-size: 14.5px; font-weight: 620; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.list__sub { font-size: 12.5px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.list__aside { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex: none; }
-.list__value { font-size: 14.5px; font-weight: 660; font-variant-numeric: tabular-nums; }
-.list__chevron { color: var(--text-muted); flex: none; }
+.list__row:last-child {
+  border-bottom: 0;
+}
+.list__row:active {
+  background: var(--surface-2);
+}
+.list__body {
+  flex: 1;
+  min-width: 0;
+}
+.list__title {
+  font-size: 14.5px;
+  font-weight: 620;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.list__sub {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.list__aside {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  flex: none;
+}
+.list__value {
+  font-size: 14.5px;
+  font-weight: 660;
+  font-variant-numeric: tabular-nums;
+}
+.list__chevron {
+  color: var(--text-muted);
+  flex: none;
+}
 
 .empty {
   text-align: center;
@@ -555,30 +909,81 @@ textarea.input { height: auto; min-height: 78px; padding: 11px 13px; resize: ver
   color: var(--text-muted);
   font-size: 13.5px;
 }
-.empty__title { font-size: 15px; font-weight: 640; color: var(--text-secondary); margin-bottom: 4px; }
+.empty__title {
+  font-size: 15px;
+  font-weight: 640;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
 
 /* ==========================================================================
    Graphiques
    ========================================================================== */
 
-.chart { position: relative; width: 100%; }
-.chart svg { display: block; width: 100%; height: auto; overflow: visible; touch-action: pan-y; }
-.chart__grid line { stroke: var(--grid); stroke-width: 1; }
-.chart__axis line { stroke: var(--baseline); stroke-width: 1; }
-.chart__grid--minor line { stroke: var(--grid); opacity: 0.45; }
+.chart {
+  position: relative;
+  width: 100%;
+}
+.chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  touch-action: pan-y;
+}
+.chart__grid line {
+  stroke: var(--grid);
+  stroke-width: 1;
+}
+.chart__axis line {
+  stroke: var(--baseline);
+  stroke-width: 1;
+}
+.chart__grid--minor line {
+  stroke: var(--grid);
+  opacity: 0.45;
+}
 .chart__tick {
   fill: var(--text-muted);
   font-size: 10px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-.chart__label { fill: var(--text-secondary); font-size: 10.5px; font-weight: 640; }
-.chart__tick--strong { fill: var(--text-secondary); font-weight: 700; }
+.chart__label {
+  fill: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 640;
+}
+.chart__tick--strong {
+  fill: var(--text-secondary);
+  font-weight: 700;
+}
 
-.chart-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px; }
-.chart-legend__item { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); font-weight: 600; }
-.chart-legend__swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; }
-.chart-legend__swatch--line { height: 2px; width: 14px; border-radius: 2px; }
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+}
+.chart-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+.chart-legend__swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: none;
+}
+.chart-legend__swatch--line {
+  height: 2px;
+  width: 14px;
+  border-radius: 2px;
+}
 
 .tooltip {
   position: absolute;
@@ -595,17 +1000,52 @@ textarea.input { height: auto; min-height: 78px; padding: 11px 13px; resize: ver
   white-space: nowrap;
   box-shadow: var(--shadow-float);
 }
-.tooltip__row { display: flex; align-items: center; gap: 6px; }
-.tooltip__dot { width: 7px; height: 7px; border-radius: 999px; flex: none; }
-.tooltip__muted { opacity: 0.7; font-weight: 500; }
+.tooltip__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tooltip__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  flex: none;
+}
+.tooltip__muted {
+  opacity: 0.7;
+  font-weight: 500;
+}
 
-.table-view { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
-.table-view th, .table-view td { padding: 7px 8px; text-align: right; border-bottom: 1px solid var(--border); }
-.table-view th { color: var(--text-muted); font-weight: 640; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.02em; }
-.table-view th:first-child, .table-view td:first-child { text-align: left; }
-.table-view tr:last-child td { border-bottom: 0; }
+.table-view {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.table-view th,
+.table-view td {
+  padding: 7px 8px;
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+}
+.table-view th {
+  color: var(--text-muted);
+  font-weight: 640;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.table-view th:first-child,
+.table-view td:first-child {
+  text-align: left;
+}
+.table-view tr:last-child td {
+  border-bottom: 0;
+}
 
-.disclosure { margin-top: 10px; }
+.disclosure {
+  margin-top: 10px;
+}
 .disclosure > summary {
   cursor: pointer;
   font-size: 12.5px;
@@ -614,12 +1054,23 @@ textarea.input { height: auto; min-height: 78px; padding: 11px 13px; resize: ver
   list-style: none;
   padding: 4px 0;
 }
-.disclosure > summary::-webkit-details-marker { display: none; }
-.disclosure > summary::before { content: '▸ '; color: var(--text-muted); }
-.disclosure[open] > summary::before { content: '▾ '; }
+.disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+.disclosure > summary::before {
+  content: '▸ ';
+  color: var(--text-muted);
+}
+.disclosure[open] > summary::before {
+  content: '▾ ';
+}
 
 /* Echelle RPE (CR-10) */
-.rpe-scale { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.rpe-scale {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
 .rpe-btn {
   position: relative;
   aspect-ratio: 1;
@@ -647,12 +1098,17 @@ textarea.input { height: auto; min-height: 78px; padding: 11px 13px; resize: ver
   background: var(--rpe-color, var(--accent));
   opacity: 0.55;
 }
-.rpe-btn[aria-pressed='true'] .rpe-btn__bar { background: currentColor; opacity: 0.9; }
+.rpe-btn[aria-pressed='true'] .rpe-btn__bar {
+  background: currentColor;
+  opacity: 0.9;
+}
 
 .sr-only {
   position: absolute;
-  width: 1px; height: 1px;
-  padding: 0; margin: -1px;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;
@@ -660,13 +1116,21 @@ textarea.input { height: auto; min-height: 78px; padding: 11px 13px; resize: ver
 }
 
 @media (prefers-reduced-motion: reduce) {
-  * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  * {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* --- Validation de formulaire --------------------------------------------- */
 
-.input--invalid { border-color: var(--status-critical); }
-.input--invalid:focus { outline-color: var(--status-critical); }
+.input--invalid {
+  border-color: var(--status-critical);
+}
+.input--invalid:focus {
+  outline-color: var(--status-critical);
+}
 
 .field__error {
   font-size: 12px;
@@ -686,11 +1150,21 @@ textarea.input { height: auto; min-height: 78px; padding: 11px 13px; resize: ver
   text-align: left;
   cursor: pointer;
 }
-.field__suggestion strong { color: var(--accent); text-decoration: underline; }
+.field__suggestion strong {
+  color: var(--accent);
+  text-decoration: underline;
+}
 
 /* Jauge de robustesse : 4 segments remplis selon le score. */
-.pwstrength { display: flex; flex-direction: column; gap: 6px; }
-.pwstrength__bars { display: flex; gap: 4px; }
+.pwstrength {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pwstrength__bars {
+  display: flex;
+  gap: 4px;
+}
 .pwstrength__bar {
   flex: 1;
   height: 4px;
@@ -698,13 +1172,423 @@ textarea.input { height: auto; min-height: 78px; padding: 11px 13px; resize: ver
   background: var(--surface-inset);
   transition: background-color 140ms ease;
 }
-.pwstrength__bar[data-on='1'] { background: var(--status-critical); }
-.pwstrength__bar[data-on='2'] { background: var(--status-serious); }
-.pwstrength__bar[data-on='3'] { background: var(--status-warning); }
-.pwstrength__bar[data-on='4'] { background: var(--status-good); }
-.pwstrength__label { font-size: 12px; color: var(--text-secondary); }
+.pwstrength__bar[data-on='1'] {
+  background: var(--status-critical);
+}
+.pwstrength__bar[data-on='2'] {
+  background: var(--status-serious);
+}
+.pwstrength__bar[data-on='3'] {
+  background: var(--status-warning);
+}
+.pwstrength__bar[data-on='4'] {
+  background: var(--status-good);
+}
+.pwstrength__label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
 
-.pwrules { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
-.pwrules__item { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
-.pwrules__item[data-met='true'] { color: var(--status-good-ink); }
-.pwrules__mark { width: 13px; flex: none; text-align: center; font-weight: 700; }
+.pwrules {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.pwrules__item {
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pwrules__item[data-met='true'] {
+  color: var(--status-good-ink);
+}
+.pwrules__mark {
+  width: 13px;
+  flex: none;
+  text-align: center;
+  font-weight: 700;
+}
+
+/* ==========================================================================
+   Respiration entre cartes
+
+   Deux cartes qui se suivent dans une section se touchaient : elles se
+   lisaient comme une seule surface alors qu'elles portent deux propos
+   distincts — le ratio hebdomadaire et l'ACWR, par exemple.
+   ========================================================================== */
+
+.section > * + *,
+.section > form > * + * {
+  margin-top: 10px;
+}
+/* Le titre de section porte deja sa propre marge basse. */
+.section > .section__head + * {
+  margin-top: 0;
+}
+
+/* Deux blocs jumeaux : empiles sur telephone, cote a cote des que la place
+   existe. Sert aux deux cartes de ratio et aux deux formulaires de domaine. */
+.pair {
+  display: grid;
+  gap: 10px;
+}
+.pair > .section {
+  margin-top: 0;
+}
+
+/* ==========================================================================
+   Navigation laterale — coach, grand ecran
+
+   Le rail n'existe que dans la mise en page bureau : en dessous de 900 px il
+   est retire de l'affichage (`display: none`), ce qui le sort aussi de l'ordre
+   de tabulation et de l'arbre d'accessibilite. Il n'y a donc jamais deux
+   navigations principales annoncees en meme temps, et l'ordre du clavier suit
+   l'ordre visuel dans chacune des deux mises en page.
+   ========================================================================== */
+
+.side-nav {
+  display: none;
+}
+
+@media (min-width: 900px) {
+  .app-shell[data-layout='coach'] .side-nav {
+    grid-area: rail;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 18px 12px 12px;
+    background: var(--surface-1);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+  }
+
+  .side-nav__brand {
+    padding: 0 10px 14px;
+  }
+  .side-nav__product {
+    font-size: 11.5px;
+    font-weight: 650;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .side-nav__team {
+    margin-top: 2px;
+    font-size: 17px;
+    font-weight: 680;
+    letter-spacing: -0.01em;
+    color: var(--text-primary);
+  }
+
+  .side-nav__item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    padding: 0 10px;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 620;
+  }
+  .side-nav__item svg {
+    width: 19px;
+    height: 19px;
+    flex: none;
+  }
+  .side-nav__item:hover {
+    background: var(--surface-2);
+  }
+  .side-nav__item[aria-current='page'] {
+    background: var(--surface-2);
+    color: var(--text-primary);
+  }
+  /* L'onglet actif est double d'un repere de forme : la couleur seule ne porte
+     jamais un etat a elle seule. */
+  .side-nav__item[aria-current='page']::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 9px;
+    bottom: 9px;
+    width: 3px;
+    border-radius: 2px;
+    background: var(--accent);
+  }
+
+  .side-nav__legal {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 10px;
+    margin-top: auto;
+    padding: 12px 10px 0;
+    border-top: 1px solid var(--border);
+  }
+  .side-nav__legal a {
+    color: var(--text-muted);
+    font-size: 11.5px;
+    padding: 2px 0;
+  }
+}
+
+/* ==========================================================================
+   Mise en page bureau du coach
+
+   Rail, en-tete et contenu forment une grille : l'en-tete ne couvre que le
+   contenu, le rail court sur toute la hauteur et ne defile pas avec les
+   donnees.
+   ========================================================================== */
+
+@media (min-width: 900px) {
+  .app-shell[data-layout='coach'] {
+    display: grid;
+    max-width: none;
+    height: 100dvh;
+    min-height: 0;
+    border: 0;
+    grid-template-columns: var(--rail-width) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas:
+      'rail header'
+      'rail main';
+  }
+  .app-shell[data-layout='coach'] > .app-header {
+    grid-area: header;
+  }
+  .app-shell[data-layout='coach'] > .app-main {
+    grid-area: main;
+  }
+
+  /* Plus de barre basse : la souris n'a rien a faire en bas de fenetre. */
+  .app-shell[data-layout='coach'] .bottom-nav {
+    display: none;
+  }
+
+  .app-shell[data-layout='coach'] .app-header {
+    padding: 16px 24px 12px;
+  }
+  .app-shell[data-layout='coach'] .app-header__title {
+    font-size: 20px;
+  }
+
+  .app-shell[data-layout='coach'] .app-main {
+    width: 100%;
+    max-width: 1400px;
+    margin-inline: auto;
+    padding: 0 24px 40px;
+  }
+  /* Ecrans de texte ou de formulaire : la place disponible n'est pas une raison
+     d'etirer une ligne de saisie sur 1400 px. */
+  .app-shell[data-layout='coach'] .app-main--narrow {
+    max-width: 660px;
+  }
+  .app-shell[data-layout='coach'] .app-main p {
+    max-width: 78ch;
+  }
+
+  /* Libelles de graphique : a 60 cm d'un ecran de portable, 10 px ne se lisent
+     plus comme a 30 cm d'un telephone. */
+  .app-shell[data-layout='coach'] .chart__tick {
+    font-size: 11.5px;
+  }
+  .app-shell[data-layout='coach'] .chart__label {
+    font-size: 12px;
+  }
+  .app-shell[data-layout='coach'] .chart-legend__item {
+    font-size: 13px;
+  }
+}
+
+/* ==========================================================================
+   Grille de tableau de bord — coach uniquement.
+
+   `LoadDashboard` est partage entre le joueur et le coach : la mise en colonnes
+   est donc conditionnee au role, et non a la seule largeur de fenetre. Le
+   tableau de bord du joueur, ouvert dans la meme fenetre de 1440 px, garde sa
+   colonne de 440 px et cette grille ne s'y applique jamais.
+   ========================================================================== */
+
+/* Pile simple par defaut : c'est la mise en page du telephone, et celle du
+   joueur a toutes les tailles. La grille n'arrive que sous le shell du coach. */
+.dash-grid {
+  display: block;
+}
+
+@media (min-width: 1180px) {
+  .app-shell[data-layout='coach'] .dash-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    align-items: start;
+  }
+  .app-shell[data-layout='coach'] .dash-grid > * {
+    margin-top: 0;
+  }
+  .app-shell[data-layout='coach'] .dash-grid > .dash-grid__full {
+    grid-column: 1 / -1;
+  }
+  .app-shell[data-layout='coach'] .dash-grid .grid-2 {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  }
+  .app-shell[data-layout='coach'] .pair {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    align-items: start;
+  }
+}
+
+@media (min-width: 1500px) {
+  .app-shell[data-layout='coach'] .app-main {
+    padding-inline: 32px;
+  }
+  .app-shell[data-layout='coach'] .dash-grid {
+    gap: 20px;
+  }
+}
+
+/* ==========================================================================
+   Effectif — liste sur telephone, tableau dense sur bureau.
+
+   Un seul jeu de balises pour les deux. Les cellules sont des elements de
+   grille nommes, et `display: contents` sur le groupe « meta » libere ses deux
+   spans pour qu'ils prennent chacun leur colonne sur grand ecran. Aucun
+   contenu n'est duplique ni masque : rien ne change pour un lecteur d'ecran
+   d'une mise en page a l'autre.
+   ========================================================================== */
+
+.roster__head {
+  display: none;
+}
+
+.roster__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    'avatar name state chevron'
+    'avatar meta state chevron';
+  align-items: center;
+  gap: 0 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  color: inherit;
+  cursor: pointer;
+}
+.roster__row:last-child {
+  border-bottom: 0;
+}
+.roster__row:active {
+  background: var(--surface-2);
+}
+
+.roster__avatar {
+  grid-area: avatar;
+}
+.roster__name {
+  grid-area: name;
+  font-size: 14.5px;
+  font-weight: 620;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.roster__meta {
+  grid-area: meta;
+  display: flex;
+  gap: 5px;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.roster__meta > * {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.roster__meta > * + *::before {
+  content: '· ';
+}
+.roster__state {
+  grid-area: state;
+  justify-self: end;
+}
+.roster__chevron {
+  grid-area: chevron;
+  color: var(--text-muted);
+}
+
+@media (min-width: 900px) {
+  .app-shell[data-layout='coach'] .roster__head,
+  .app-shell[data-layout='coach'] .roster__row {
+    /* Piste d'avatar figee a 38 px : l'en-tete et les lignes sont deux grilles
+       distinctes, une piste `auto` s'y dimensionnerait sur des contenus
+       differents et les colonnes ne tomberaient pas en face. */
+    grid-template-columns: 30px minmax(150px, 1.6fr) minmax(90px, 1fr) minmax(110px, 1fr) 128px 20px;
+    grid-template-areas: 'avatar name position last state chevron';
+    gap: 0 16px;
+    padding: 9px 16px;
+  }
+  /* `display: contents` ouvre le groupe : ses deux spans deviennent des
+     cellules de la grille et prennent chacun sa colonne. */
+  .app-shell[data-layout='coach'] .roster__meta {
+    display: contents;
+  }
+  .app-shell[data-layout='coach'] .roster__meta > * + *::before {
+    content: none;
+  }
+  .app-shell[data-layout='coach'] .roster__position {
+    grid-area: position;
+  }
+  .app-shell[data-layout='coach'] .roster__last {
+    grid-area: last;
+  }
+  .app-shell[data-layout='coach'] .roster__position,
+  .app-shell[data-layout='coach'] .roster__last {
+    font-size: 13px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .app-shell[data-layout='coach'] .roster__row:hover {
+    background: var(--surface-2);
+  }
+  /* Une ligne de tableau se parcourt a la verticale : l'initiale reste utile
+     pour retrouver un joueur, l'avatar pleine taille ne ferait qu'ecarter les
+     lignes. */
+  .app-shell[data-layout='coach'] .roster__avatar .avatar {
+    width: 30px;
+    height: 30px;
+    font-size: 11.5px;
+  }
+
+  /* En-tete de colonnes : purement visuel — chaque ligne porte deja ses
+     libelles en toutes lettres, l'annoncer deux fois n'aiderait personne. */
+  .app-shell[data-layout='coach'] .roster__head {
+    display: grid;
+    align-items: center;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border-strong);
+    background: var(--surface-2);
+    font-size: 11.5px;
+    font-weight: 640;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .app-shell[data-layout='coach'] .roster__head > :nth-child(5) {
+    text-align: right;
+  }
+
+  /* L'invitation est un encart court : l'etirer sur 1400 px le vide. */
+  .app-shell[data-layout='coach'] .roster-invite {
+    max-width: 620px;
+  }
+}

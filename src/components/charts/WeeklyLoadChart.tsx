@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { shortDate } from '../../lib/date';
-import { formatLoad, linePath, niceScale, useMeasure } from './chartUtils';
+import { chartHeight, formatLoad, labelStep, linePath, niceScale, useMeasure } from './chartUtils';
 
 export interface WeeklyPoint {
   /** Debut de la fenêtre glissante de 7 jours. */
@@ -25,7 +25,9 @@ export function WeeklyLoadChart({ data }: { data: WeeklyPoint[] }) {
   const { ref, width } = useMeasure<HTMLDivElement>();
   const [active, setActive] = useState<number | null>(null);
 
-  const height = 168;
+  // Deux series superposees ont besoin de hauteur pour se separer : a largeur
+  // de portable, 168 px les collent l'une a l'autre.
+  const height = chartHeight(width, 0.38, 168, 300);
   const padLeft = 30;
   const padRight = 34; // place pour les étiquettes directes
   const padTop = 12;
@@ -38,7 +40,8 @@ export function WeeklyLoadChart({ data }: { data: WeeklyPoint[] }) {
   const ticks: number[] = [];
   for (let v = 0; v <= max + 1e-6; v += step) ticks.push(v);
 
-  const x = (i: number) => padLeft + (data.length > 1 ? (i / (data.length - 1)) * plotW : plotW / 2);
+  const x = (i: number) =>
+    padLeft + (data.length > 1 ? (i / (data.length - 1)) * plotW : plotW / 2);
   const y = (v: number) => padTop + plotH - (v / max) * plotH;
 
   const pick = (clientX: number, rect: DOMRect) => {
@@ -49,6 +52,7 @@ export function WeeklyLoadChart({ data }: { data: WeeklyPoint[] }) {
   };
 
   const point = active !== null ? data[active] : null;
+  const tickEvery = labelStep(data.length, plotW, 64);
 
   return (
     <div className="chart" ref={ref}>
@@ -103,10 +107,25 @@ export function WeeklyLoadChart({ data }: { data: WeeklyPoint[] }) {
             const yChronic = y(data[last].chronic);
             // Les deux etiquettes de fin sont ecartees quand les series se rejoignent.
             const collide = Math.abs(yLoad - yChronic) < 12;
-            const shift = collide ? (si === 0 ? (yLoad <= yChronic ? -6 : 6) : yLoad <= yChronic ? 6 : -6) : 0;
+            const shift = collide
+              ? si === 0
+                ? yLoad <= yChronic
+                  ? -6
+                  : 6
+                : yLoad <= yChronic
+                  ? 6
+                  : -6
+              : 0;
             return (
               <g key={`${s.key}-endpoint`}>
-                <circle cx={x(last)} cy={y(data[last][s.key])} r={4} fill={s.color} stroke="var(--surface-1)" strokeWidth={2} />
+                <circle
+                  cx={x(last)}
+                  cy={y(data[last][s.key])}
+                  r={4}
+                  fill={s.color}
+                  stroke="var(--surface-1)"
+                  strokeWidth={2}
+                />
                 <text
                   className="chart__label"
                   x={x(last) + 8}
@@ -138,7 +157,7 @@ export function WeeklyLoadChart({ data }: { data: WeeklyPoint[] }) {
 
           <g className="chart__tick" textAnchor="middle">
             {data.map((d, i) =>
-              i % 2 === 0 ? (
+              i % tickEvery === 0 ? (
                 <text key={d.end} x={x(i)} y={height - 6}>
                   {shortDate(d.end)}
                 </text>
@@ -166,7 +185,10 @@ export function WeeklyLoadChart({ data }: { data: WeeklyPoint[] }) {
       <div className="chart-legend">
         {SERIES.map((s) => (
           <span className="chart-legend__item" key={s.key}>
-            <span className="chart-legend__swatch chart-legend__swatch--line" style={{ background: s.color }} />
+            <span
+              className="chart-legend__swatch chart-legend__swatch--line"
+              style={{ background: s.color }}
+            />
             {s.label}
           </span>
         ))}

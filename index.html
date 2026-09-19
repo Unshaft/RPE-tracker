@@ -2,7 +2,11 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1" />
+    <!-- `maximum-scale=1` a ete retire : il interdisait le zoom a deux doigts, ce
+         que WCAG 2.1 (1.4.4) n'admet pas. Il servait a empecher le zoom
+         automatique d'iOS a la mise au point d'un champ — probleme deja resolu
+         a la source, les champs de `.input` etant a 16px. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0d0d0d" />
     <meta name="description" content="Suivi de la charge d'entrainement (RPE) pour joueurs et coachs." />
     <meta name="apple-mobile-web-app-capable" content="yes" />

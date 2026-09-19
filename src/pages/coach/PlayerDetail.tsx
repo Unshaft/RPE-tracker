@@ -3,6 +3,7 @@ import { Navigate, useParams } from 'react-router-dom';
 import { Header, Main } from '../../components/Layout';
 import { LoadDashboard } from '../../components/LoadDashboard';
 import { Avatar, Card, EmptyState, Loading, Section, rpeVars } from '../../components/ui';
+import { useLoadContext } from '../../components/loadContext';
 import { useAuth } from '../../lib/auth';
 import { longDate, today } from '../../lib/date';
 import { useTeamPlayers, useTeamSessions } from '../../lib/hooks';
@@ -13,14 +14,15 @@ import { SESSION_TYPES } from '../../lib/types';
 export function PlayerDetail() {
   const { playerId } = useParams();
   const { team } = useAuth();
+  const ctx = useLoadContext();
   const { data: players, loading: playersLoading } = useTeamPlayers(team?.id);
   const { data: sessionsByPlayer, loading: sessionsLoading } = useTeamSessions(team?.id);
   const loading = playersLoading || sessionsLoading;
   const ref = today();
 
   const rows = useMemo(
-    () => buildTeamRows(players, sessionsByPlayer, ref),
-    [players, sessionsByPlayer, ref],
+    () => buildTeamRows(players, sessionsByPlayer, ref, ctx),
+    [players, sessionsByPlayer, ref, ctx],
   );
   const row = rows.find((r) => r.player.id === playerId);
   const summary = useMemo(() => summarizeTeam(rows), [rows]);
@@ -93,7 +95,7 @@ export function PlayerDetail() {
                           {s.comment ? ` · « ${s.comment} »` : ''}
                         </div>
                       </div>
-                      <span className="list__value">{sessionLoad(s)} UA</span>
+                      <span className="list__value">{Math.round(sessionLoad(s, ctx))} UA</span>
                     </div>
                   );
                 })}
