@@ -119,12 +119,14 @@ try {
   // Contrat changé par `20260919130000_invitations_regenerables.sql` : un code
   // refusé ne lève plus d'exception, il renvoie `null`. L'exception annulerait
   // la transaction, donc l'enregistrement de la tentative, donc le frein.
+  // Un refus se lit sur l'absence d'`id`, pas sur `data === null` : une
+  // fonction qui renvoie NULL pour un composite rend une ligne toute nulle.
   const { data: refuse, error: badCodeError } = await player.client.rpc('join_team', {
     invite_code: 'ZZZZZZ',
   });
   check(
-    'un code inconnu renvoie null, sans exception',
-    refuse === null && !badCodeError,
+    'un code inconnu ne rattache a rien, sans exception',
+    !refuse?.id && !badCodeError,
     badCodeError?.message,
   );
 
@@ -287,7 +289,7 @@ try {
   const { data: parAncienCode } = await late.client.rpc('join_team', {
     invite_code: ancienCode,
   });
-  check('l’ancien code ne vaut plus rien', parAncienCode === null);
+  check('l’ancien code ne vaut plus rien', !parAncienCode?.id);
 
   const { data: parNouveauCode } = await late.client.rpc('join_team', {
     invite_code: rotated.invite_code,
@@ -331,7 +333,7 @@ try {
   const { data: apresRevocation } = await late.client.rpc('join_team', {
     invite_code: codeRevoque,
   });
-  check('un code révoqué ne rattache plus', apresRevocation === null);
+  check('un code révoqué ne rattache plus', !apresRevocation?.id);
 
   // Le frein : cinq essais par quart d'heure. Au-delà, même un code valide est
   // refusé — et sans message distinct, pour que la limitation ne serve pas
@@ -349,7 +351,7 @@ try {
   });
   check(
     'au-delà du quota, même un code valide est refusé',
-    freine === null && !freineError,
+    !freine?.id && !freineError,
     freineError?.message,
   );
 

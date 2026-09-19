@@ -314,7 +314,11 @@ export async function joinTeamByCode(code: string): Promise<Team> {
 
   const { data, error } = await supabase.rpc('join_team', { invite_code: trimmed });
   if (error) fail(error, "Code d'équipe inconnu.");
-  if (!data) {
+  // Le refus se lit sur `id`, et non sur l'absence de `data` : une fonction qui
+  // renvoie NULL pour un type composite ne produit pas « aucune ligne » mais une
+  // ligne dont toutes les colonnes sont nulles. `data` est donc toujours un
+  // objet, y compris quand le code est refusé.
+  if (!data?.id) {
     throw new DbError(
       "Ce code d'équipe n'est pas valide. Vérifie-le auprès de ton coach, et " +
         'patiente quelques minutes avant de multiplier les essais.',
