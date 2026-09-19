@@ -565,6 +565,7 @@ textarea.input { height: auto; min-height: 78px; padding: 11px 13px; resize: ver
 .chart svg { display: block; width: 100%; height: auto; overflow: visible; touch-action: pan-y; }
 .chart__grid line { stroke: var(--grid); stroke-width: 1; }
 .chart__axis line { stroke: var(--baseline); stroke-width: 1; }
+.chart__grid--minor line { stroke: var(--grid); opacity: 0.45; }
 .chart__tick {
   fill: var(--text-muted);
   font-size: 10px;
@@ -572,6 +573,7 @@ textarea.input { height: auto; min-height: 78px; padding: 11px 13px; resize: ver
   font-variant-numeric: tabular-nums;
 }
 .chart__label { fill: var(--text-secondary); font-size: 10.5px; font-weight: 640; }
+.chart__tick--strong { fill: var(--text-secondary); font-weight: 700; }
 
 .chart-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px; }
 .chart-legend__item { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); font-weight: 600; }

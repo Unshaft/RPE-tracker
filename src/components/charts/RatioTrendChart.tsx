@@ -22,12 +22,23 @@ const BANDS = [
   { from: 1.5, to: 2, status: 'critical', label: 'Risque' },
 ] as const;
 
+/** Echelle fixe : un ratio se lit toujours sur les memes reperes. */
 const MAX = 2;
+/** Graduations fines, tous les 0,1. */
+const MINOR = Array.from({ length: MAX * 10 + 1 }, (_, i) => i / 10);
+/** Graduations chiffrees : le pas de 0,2 plus les seuils de decision. */
+const LABELLED = [0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.3, 1.5, 1.8, 2.0];
+/** Seuils qui delimitent la zone de developpement. */
+const THRESHOLDS = [0.8, 1.3];
 
 /**
  * Evolution du ratio hebdomadaire, semaine calendaire par semaine calendaire,
  * pose sur les zones de risque. La couleur porte l’etat, jamais l’identite de
  * la serie : la ligne reste neutre, ce sont les bandes de fond qui situent.
+ *
+ * L’echelle est figee de 0 a 2 : deux semaines, deux joueurs, deux ecrans se
+ * comparent sans relire l’axe. Un ratio au-dela de 2 est ramene au plafond,
+ * sa valeur exacte restant lisible dans l’infobulle.
  *
  * Les semaines sans reference exploitable (debut de saison) n’ont pas de
  * ratio : la ligne est interrompue plutot que ramenee a zero, qui se lirait
@@ -37,18 +48,17 @@ export function RatioTrendChart({ data }: { data: RatioPoint[] }) {
   const { ref, width } = useMeasure<HTMLDivElement>();
   const [active, setActive] = useState<number | null>(null);
 
-  const height = 178;
-  const padLeft = 30;
+  const height = 236;
+  const padLeft = 32;
   const padRight = 12;
   const padTop = 12;
   const axisBand = 20;
   const plotW = Math.max(0, width - padLeft - padRight);
   const plotH = height - padTop - axisBand;
 
-  const ceiling = Math.max(MAX, ...data.map((d) => d.ratio ?? 0));
   const x = (i: number) =>
     padLeft + (data.length > 1 ? (i / (data.length - 1)) * plotW : plotW / 2);
-  const y = (v: number) => padTop + plotH - (Math.min(v, ceiling) / ceiling) * plotH;
+  const y = (v: number) => padTop + plotH - (Math.min(Math.max(v, 0), MAX) / MAX) * plotH;
 
   // Segments continus : une semaine sans ratio coupe la ligne.
   const segments: { x: number; y: number }[][] = [];
@@ -78,7 +88,7 @@ export function RatioTrendChart({ data }: { data: RatioPoint[] }) {
           width={width}
           height={height}
           role="img"
-          aria-label="Evolution du ratio hebdomadaire semaine par semaine, avec les zones de risque"
+          aria-label="Evolution du ratio hebdomadaire semaine par semaine, sur une echelle de 0 a 2 avec la zone de developpement entre 0,8 et 1,3"
           onPointerMove={(e) => pick(e.clientX, e.currentTarget.getBoundingClientRect())}
           onPointerLeave={() => setActive(null)}
         >
@@ -86,25 +96,45 @@ export function RatioTrendChart({ data }: { data: RatioPoint[] }) {
             <rect
               key={b.label}
               x={padLeft}
-              y={y(Math.min(b.to, ceiling))}
+              y={y(b.to)}
               width={plotW}
-              height={Math.max(0, y(b.from) - y(Math.min(b.to, ceiling)))}
+              height={Math.max(0, y(b.from) - y(b.to))}
               fill={`color-mix(in srgb, var(--status-${b.status}) 13%, transparent)`}
             />
           ))}
 
+          <g className="chart__grid chart__grid--minor">
+            {MINOR.map((v) => (
+              <line key={v} x1={padLeft} x2={width - padRight} y1={y(v)} y2={y(v)} />
+            ))}
+          </g>
+          <g className="chart__grid">
+            {THRESHOLDS.map((v) => (
+              <line key={v} x1={padLeft} x2={width - padRight} y1={y(v)} y2={y(v)} />
+            ))}
+          </g>
+
           <g className="chart__tick" textAnchor="end">
-            {[0.8, 1.3, 1.5].map((v) => (
-              <text key={v} x={padLeft - 6} y={y(v) + 3.5}>
+            {LABELLED.map((v) => (
+              <text
+                key={v}
+                x={padLeft - 6}
+                y={y(v) + 3.5}
+                className={THRESHOLDS.includes(v) ? 'chart__tick--strong' : undefined}
+              >
                 {v.toFixed(1).replace('.', ',')}
               </text>
             ))}
           </g>
-          <g className="chart__grid">
-            {[0.8, 1.3, 1.5].map((v) => (
-              <line key={v} x1={padLeft} x2={width - padRight} y1={y(v)} y2={y(v)} />
-            ))}
-          </g>
+
+          <text
+            className="chart__label"
+            x={padLeft + plotW / 2}
+            y={(y(0.8) + y(1.3)) / 2 + 3.5}
+            textAnchor="middle"
+          >
+            Zone de developpement
+          </text>
 
           {active !== null && (
             <line
