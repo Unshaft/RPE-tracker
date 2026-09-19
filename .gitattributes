@@ -1,0 +1,10 @@
+# Un seul style de fin de ligne, dans le dépôt comme dans la copie de travail.
+#
+# `core.autocrlf` est un réglage de poste, pas du projet : sans ce fichier, un
+# poste Windows sort les fichiers en CRLF alors que git les stocke en LF, et
+# `prettier --check` signale alors tout le dépôt comme mal formaté — un faux
+# positif qui apprend à ignorer l'outil.
+* text=auto eol=lf
+
+# Le certificat est un PEM : du texte, mais que personne ne reformate.
+scripts/supabase-ca.crt -text
