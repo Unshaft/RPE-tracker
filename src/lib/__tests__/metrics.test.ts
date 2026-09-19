@@ -31,7 +31,7 @@ function flat(days: number, load = 100): TrainingSession[] {
 
 describe('sessionLoad', () => {
   it('multiplie le RPE par la durée', () => {
-    expect(sessionLoad({ rpe: 7, durationMin: 90 })).toBe(630);
+    expect(sessionLoad(s(END, 7, 90))).toBe(630);
   });
 });
 
