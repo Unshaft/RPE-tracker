@@ -9,5 +9,7 @@ coverage
 *.tsbuildinfo
 .vercel
 .env*
+# ...sauf le modele, qui ne contient que des exemples.
+!.env.example
 .playwright-mcp
 supabase/.temp

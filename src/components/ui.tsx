@@ -1,7 +1,13 @@
 import type { ReactNode } from 'react';
 import { formatLoad } from './charts/chartUtils';
 
-export function Avatar({ user, large }: { user: { firstName: string; lastName: string }; large?: boolean }) {
+export function Avatar({
+  user,
+  large,
+}: {
+  user: { firstName: string; lastName: string };
+  large?: boolean;
+}) {
   const initials = `${user.firstName[0] ?? ''}${user.lastName[0] ?? ''}`.toUpperCase();
   return <span className={large ? 'avatar avatar--lg' : 'avatar'}>{initials}</span>;
 }
@@ -9,10 +15,22 @@ export function Avatar({ user, large }: { user: { firstName: string; lastName: s
 export type StatusRole = 'good' | 'warning' | 'serious' | 'critical' | 'neutral';
 
 /** Statut : couleur + icone + libelle, jamais la couleur seule. */
-export function StatusBadge({ status, icon, children }: { status: StatusRole; icon?: string; children: ReactNode }) {
+export function StatusBadge({
+  status,
+  icon,
+  children,
+}: {
+  status: StatusRole;
+  icon?: string;
+  children: ReactNode;
+}) {
   return (
     <span className={`badge badge--${status}`}>
-      {icon && <span className="badge__icon" aria-hidden="true">{icon}</span>}
+      {icon && (
+        <span className="badge__icon" aria-hidden="true">
+          {icon}
+        </span>
+      )}
       {children}
     </span>
   );
@@ -42,7 +60,8 @@ export function Tile({
 export function Delta({ value }: { value: number | null }) {
   if (value === null) return <span className="delta delta--flat">Pas de référence</span>;
   const pct = Math.round(value * 100);
-  if (Math.abs(pct) < 3) return <span className="delta delta--flat">= stable vs semaine passée</span>;
+  if (Math.abs(pct) < 3)
+    return <span className="delta delta--flat">= stable vs semaine passée</span>;
   const up = pct > 0;
   return (
     <span className="delta delta--flat">
@@ -80,9 +99,24 @@ export function Card({
   );
 }
 
-export function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
+export function Section({
+  title,
+  action,
+  children,
+  full,
+}: {
+  title: string;
+  action?: ReactNode;
+  children: ReactNode;
+  /**
+   * Dans une grille `.dash-grid` (bureau coach), la section prend toute la
+   * largeur au lieu d'une colonne. Réservé à ce qui perd son sens à moitié
+   * moins large : une courbe sur 8 semaines, une frise de 14 jours.
+   */
+  full?: boolean;
+}) {
   return (
-    <section className="section">
+    <section className={full ? 'section dash-grid__full' : 'section'}>
       <div className="section__head">
         <h2 className="section__title">{title}</h2>
         {action}

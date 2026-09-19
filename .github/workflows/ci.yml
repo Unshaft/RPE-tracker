@@ -1,0 +1,72 @@
+# Intégration continue.
+#
+# Quatre garde-fous, dans l'ordre du plus rapide au plus lent : typage, tests,
+# lint, build. Plus deux contrôles qui ne lisent que des fichiers : la cohérence
+# entre le type `Database` et les migrations, et les contrastes de la palette.
+#
+# Ce workflow n'a besoin d'AUCUN secret et ne touche à aucune base : ni
+# migration, ni `db:verify`, ni clé Supabase. Le build s'en passe — `vite.config.ts`
+# tolère des variables absentes et produit alors un bundle qui échouera au
+# chargement, ce qui est exactement ce qu'on veut : la CI vérifie que le code
+# compile, pas qu'il est configuré.
+#
+# Les étapes ne sont pas `continue-on-error` : un rapport partiel serait pire
+# qu'un échec net, puisqu'on prendrait l'habitude de le lire en diagonale.
+
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+# Une seule exécution par branche : un push qui en suit un autre annule le
+# précédent plutôt que de faire la queue.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verification:
+    name: Typage, tests, lint et build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Aligné sur le prérequis du dépôt (Node >= 20.6 pour `--env-file` et
+          # `import.meta.dirname`), en LTS.
+          node-version: '22'
+          cache: npm
+
+      # `npm ci` et non `npm install` : installation reproductible à partir du
+      # package-lock.json, et refus net si le lock a divergé du package.json.
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Typage
+        run: npm run typecheck
+
+      - name: Tests unitaires
+        run: npm test
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      # Le type `Database` est écrit à la main : rien d'autre ne prévient qu'il
+      # a divergé du SQL. Lecture de fichiers uniquement, aucune connexion.
+      - name: Cohérence du type Database et des migrations
+        run: npm run check:schema
+
+      # La palette se décrit comme accessible et CVD-safe dans son propre
+      # en-tête ; sans ce passage, cette promesse ne tiendrait qu'à la relecture.
+      - name: Contrastes et rampes de la palette
+        run: npm run validate:palette

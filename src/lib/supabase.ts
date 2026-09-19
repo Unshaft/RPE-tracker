@@ -1,9 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Role, SessionType } from './types';
+import type { LoadDomain, LoadModelCode, Role, SessionType } from './types';
+
+/** Valeur jsonb telle que PostgREST la rend : la forme est validée côté base. */
+export type Json = string | number | boolean | null | { [key: string]: Json } | Json[];
 
 /**
  * Schéma de la base, tel que le voit PostgREST. Décrit à la main plutôt que
- * généré : le modèle tient en trois tables et la génération demanderait le CLI
+ * généré : le modèle tient en cinq tables et la génération demanderait le CLI
  * Supabase dans la boucle de build.
  *
  * Les colonnes sont en `snake_case` (convention Postgres) alors que l'app parle
@@ -45,10 +48,18 @@ export interface Database {
           id: string;
           name: string;
           coach_id: string;
-          invite_code: string;
+          invite_code: string | null;
+          invite_expires_at: string | null;
+          invite_rotated_at: string;
           created_at: string;
         };
-        Insert: { name: string; coach_id: string; invite_code: string };
+        // `never` et non un objet : l'`INSERT` est révoqué sur la table, une
+        // équipe ne naît plus que de `create_team`. Le déclarer ici fait
+        // échouer à la compilation ce qui échouerait sinon en production.
+        Insert: never;
+        // Le jeton d'invitation est absent : `UPDATE` lui est révoqué au niveau
+        // colonne, il ne se manipule que par `rotate_team_invite` /
+        // `revoke_team_invite`.
         Update: { name?: string };
         Relationships: [];
       };
@@ -61,6 +72,7 @@ export interface Database {
           duration_min: number;
           rpe: number;
           comment: string | null;
+          inputs: Json;
           created_at: string;
         };
         Insert: {
@@ -70,6 +82,7 @@ export interface Database {
           duration_min: number;
           rpe: number;
           comment?: string | null;
+          inputs?: Json;
         };
         Update: {
           session_date?: string;
@@ -77,6 +90,45 @@ export interface Database {
           duration_min?: number;
           rpe?: number;
           comment?: string | null;
+          inputs?: Json;
+        };
+        Relationships: [];
+      };
+      load_models: {
+        Row: {
+          code: LoadModelCode;
+          domain: LoadDomain;
+          label: string;
+          reference: string;
+          input_schema: Json;
+          is_default: boolean;
+        };
+        // Catalogue en lecture seule : aucune policy d'écriture n'existe.
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      team_load_models: {
+        Row: {
+          id: string;
+          team_id: string;
+          domain: LoadDomain;
+          model_code: LoadModelCode;
+          params: Json;
+          effective_from: string;
+          created_at: string;
+        };
+        Insert: {
+          team_id: string;
+          domain: LoadDomain;
+          model_code: LoadModelCode;
+          params?: Json;
+          effective_from: string;
+        };
+        Update: {
+          model_code?: LoadModelCode;
+          params?: Json;
+          effective_from?: string;
         };
         Relationships: [];
       };
@@ -85,7 +137,27 @@ export interface Database {
     Functions: {
       join_team: {
         Args: { invite_code: string };
+        // `null` pour un code inconnu, révoqué, expiré — ou pour un appelant
+        // qui a épuisé son quota de tentatives. Les quatre cas sont
+        // volontairement indiscernables ; voir
+        // `20260919130000_invitations_regenerables.sql`.
+        Returns: Database['public']['Tables']['teams']['Row'] | null;
+      };
+      create_team: {
+        Args: { team_name: string };
         Returns: Database['public']['Tables']['teams']['Row'];
+      };
+      rotate_team_invite: {
+        Args: { expires_at: string | null };
+        Returns: Database['public']['Tables']['teams']['Row'];
+      };
+      revoke_team_invite: {
+        Args: Record<string, never>;
+        Returns: Database['public']['Tables']['teams']['Row'];
+      };
+      delete_my_account: {
+        Args: { confirm_team_deletion: boolean };
+        Returns: void;
       };
     };
     Enums: Record<string, never>;

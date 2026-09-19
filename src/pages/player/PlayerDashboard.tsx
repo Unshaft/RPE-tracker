@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Header, Main } from '../../components/Layout';
 import { LoadDashboard } from '../../components/LoadDashboard';
 import { Avatar, Card, EmptyState, Loading, Section, rpeVars } from '../../components/ui';
+import { useLoadContext } from '../../components/loadContext';
 import { IconChevron } from '../../components/icons';
 import { longDate, relativeDate, today } from '../../lib/date';
 import { useAuth } from '../../lib/auth';
@@ -11,6 +12,7 @@ import { SESSION_TYPES } from '../../lib/types';
 
 export function PlayerDashboard() {
   const { user, team } = useAuth();
+  const ctx = useLoadContext();
   const { data: sessions, loading, error } = usePlayerSessions(user?.id);
   const recent = sessions.slice(0, 3);
 
@@ -79,7 +81,7 @@ export function PlayerDashboard() {
                           {relativeDate(s.date)} · {s.durationMin} min
                         </div>
                       </div>
-                      <span className="list__value">{sessionLoad(s)} UA</span>
+                      <span className="list__value">{Math.round(sessionLoad(s, ctx))} UA</span>
                       <IconChevron className="list__chevron" />
                     </Link>
                   );

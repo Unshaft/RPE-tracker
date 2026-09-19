@@ -1,12 +1,17 @@
 import { useMemo, useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Header, Main } from '../components/Layout';
+import { readInviteCode } from '../components/invitations';
 import { useAuth } from '../lib/auth';
 import type { Role } from '../lib/types';
 import { checkEmail, checkPassword } from '../lib/validation';
 
 export function Register() {
   const { register } = useAuth();
+  // Le lien d'invitation porte le code dans l'URL. Arriver par ce lien, c'est
+  // etre attendu dans un effectif : le formulaire s'ouvre donc cote joueur,
+  // avec le code deja rempli, et non sur le choix joueur/coach.
+  const invited = readInviteCode(useLocation().search);
   const [role, setRole] = useState<Role>('player');
   const [form, setForm] = useState({
     firstName: '',
@@ -15,13 +20,17 @@ export function Register() {
     password: '',
     position: '',
     teamName: '',
-    inviteCode: '',
+    inviteCode: invited,
   });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // Un champ ne signale son erreur qu'une fois quitte (ou apres une tentative
   // d'envoi) : on ne veut pas crier "invalide" des la premiere lettre tapee.
   const [touched, setTouched] = useState({ email: false, password: false });
+  // Acceptation des CGU et de la politique de confidentialité. Exigée avant la
+  // création du compte : les données saisies ensuite (ressenti d'effort
+  // nominatif, visible par le coach) demandent une information préalable.
+  const [accepted, setAccepted] = useState(false);
 
   const set = (key: keyof typeof form) => (e: { target: { value: string } }) =>
     setForm((f) => ({ ...f, [key]: e.target.value }));
@@ -41,12 +50,12 @@ export function Register() {
 
   const showEmailError = touched.email && !emailCheck.valid;
   const showPasswordError = touched.password && !passwordCheck.valid;
-  const canSubmit = emailCheck.valid && passwordCheck.valid && !busy;
+  const canSubmit = emailCheck.valid && passwordCheck.valid && accepted && !busy;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setTouched({ email: true, password: true });
-    if (!emailCheck.valid || !passwordCheck.valid) return;
+    if (!emailCheck.valid || !passwordCheck.valid || !accepted) return;
 
     setError(null);
     setBusy(true);
@@ -195,6 +204,32 @@ export function Register() {
               <span className="field__hint">Un code d’invitation sera généré pour tes joueurs.</span>
             </div>
           )}
+
+          <div className="field">
+            <label
+              htmlFor="accept-legal"
+              style={{ display: 'flex', gap: 10, alignItems: 'flex-start', cursor: 'pointer' }}
+            >
+              <input
+                id="accept-legal"
+                type="checkbox"
+                checked={accepted}
+                onChange={(e) => setAccepted(e.target.checked)}
+                style={{ width: 18, height: 18, marginTop: 2, flex: 'none', accentColor: 'var(--accent)' }}
+                required
+              />
+              <span style={{ fontSize: 13, lineHeight: 1.5, color: 'var(--text-secondary)' }}>
+                J’accepte les <Link to="/cgu">conditions générales d’utilisation</Link> et j’ai pris
+                connaissance de la{' '}
+                <Link to="/confidentialite">politique de confidentialité</Link>. Je comprends que
+                mes séances, ressenti d’effort et commentaires compris, sont visibles par le coach
+                de mon équipe.
+              </span>
+            </label>
+            <span className="field__hint">
+              Si tu es mineur, cette inscription suppose l’accord de ton représentant légal.
+            </span>
+          </div>
 
           {error && <div className="alert alert--error" role="alert">{error}</div>}
 

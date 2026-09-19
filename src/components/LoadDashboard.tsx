@@ -1,6 +1,5 @@
 import { dayLabel, longDate, shortDate, weekLabel } from '../lib/date';
 import {
-  WEEKLY_LOOKBACK,
   acwrZone,
   computePlayerMetrics,
   dailySeries,
@@ -11,6 +10,7 @@ import {
   weeklySeries,
 } from '../lib/metrics';
 import type { TrainingSession } from '../lib/types';
+import { useLoadContext } from './loadContext';
 import { AcwrGauge } from './charts/AcwrGauge';
 import { formatLoad, formatRatio, plural } from './charts/chartUtils';
 import { BarSeriesChart } from './charts/BarSeriesChart';
@@ -30,6 +30,15 @@ const MONOTONY_HINT: Record<string, string> = {
  * joueur et par la fiche joueur cote coach : une seule definition des
  * métriques et des graphiques.
  *
+ * Ce partage est aussi ce qui contraint sa mise en page. Le joueur le lit dans
+ * une colonne de 440 px sur son téléphone, le coach dans 1200 px sur son
+ * portable — deux besoins que la même largeur de fenêtre ne distingue pas. Les
+ * blocs sont donc posés dans `.dash-grid`, une pile sur téléphone, que seul le
+ * shell du coach (`[data-layout='coach']`) met en deux colonnes. `full` marque
+ * ce qui perd son sens à demi-largeur : la courbe de ratio sur 8 semaines et la
+ * frise de 14 jours. Rien n’est conditionné en JavaScript : le même arbre sert
+ * les deux rôles.
+ *
  * Deux ratios sont affiches cote a cote, dans cet ordre :
  *  1. le ratio hebdomadaire calendaire (semaine en cours / 4 semaines
  *     precedentes), lecture de reference du staff ;
@@ -45,16 +54,19 @@ export function LoadDashboard({
   /** Charge moyenne de l’équipe sur la semaine en cours, pour situer le joueur. */
   teamWeekLoad?: number | null;
 }) {
-  const m = computePlayerMetrics(sessions, referenceDate);
+  // Le modele de l'equipe n'est pas passe en prop : chacun des sept calculs
+  // ci-dessous doit le recevoir, et un oubli ne se verrait pas a l'ecran.
+  const ctx = useLoadContext();
+  const m = computePlayerMetrics(sessions, referenceDate, ctx);
   const week = m.week;
-  const weekZone = riskZone(week.ratio);
-  const acwrInfo = acwrZone(m.acwr);
+  const weekZone = riskZone(week.ratio, m.params.acwrThresholds);
+  const acwrInfo = acwrZone(m.acwr, m.params.acwrThresholds);
   const monoStatus = monotonyStatus(m.monotony);
-  const daily = dailySeries(sessions, referenceDate, 14);
-  const ratioTrend = weeklyRatioSeries(sessions, referenceDate, 8);
+  const daily = dailySeries(sessions, referenceDate, 14, ctx);
+  const ratioTrend = weeklyRatioSeries(sessions, referenceDate, 8, ctx);
   const currentWeek = ratioTrend[ratioTrend.length - 1];
-  const rolling = weeklySeries(sessions, referenceDate, 8);
-  const byType = loadByType(sessions, referenceDate, 28);
+  const rolling = weeklySeries(sessions, referenceDate, 8, ctx);
+  const byType = loadByType(sessions, referenceDate, 28, ctx);
 
   if (sessions.length === 0) {
     return (
@@ -67,8 +79,8 @@ export function LoadDashboard({
   }
 
   return (
-    <>
-      <div className="hero">
+    <div className="dash-grid">
+      <div className="hero dash-grid__full">
         <div className="row row--between" style={{ alignItems: 'flex-start' }}>
           <div>
             <div className="hero__label">Semaine en cours · {weekLabel(currentWeek.start)}</div>
@@ -88,7 +100,7 @@ export function LoadDashboard({
           {week.partial ? ` · jour ${currentWeek.elapsedDays}/7` : ' · semaine complète'}
         </div>
         <div className="hero__foot" style={{ color: 'var(--text-muted)' }}>
-          7 jours glissants : {formatLoad(m.acute)} UA
+          {m.params.acuteWindowDays} jours glissants : {formatLoad(m.acute)} UA
         </div>
         <div className="hero__foot">
           <Delta value={m.acuteDelta} />
@@ -102,60 +114,65 @@ export function LoadDashboard({
         )}
       </div>
 
-      <Section title="Zone de risque">
-        <Card
-          title={`Ratio hebdo ${formatRatio(week.ratio)}`}
-          hint={
-            week.weeksUsed === 0
-              ? 'Pas encore de semaine de référence'
-              : `Semaine ${formatLoad(week.current)} UA · moyenne des ${week.weeksUsed} semaines précédentes ${formatLoad(week.baseline)} UA`
-          }
-        >
-          <AcwrGauge ratio={week.ratio} />
-          {weekZone ? (
-            <p style={{ marginTop: 10, fontSize: 13, color: 'var(--text-secondary)' }}>
-              <strong style={{ fontWeight: 640 }}>
-                {weekZone.icon} {weekZone.label}.
-              </strong>{' '}
-              {weekZone.advice}
-            </p>
-          ) : (
-            <p style={{ marginTop: 10, fontSize: 13, color: 'var(--text-secondary)' }}>
-              Le ratio se calcule des qu’une semaine précédente est renseignée.
-            </p>
-          )}
-          {week.partial && week.ratio !== null && (
-            <p style={{ marginTop: 8, fontSize: 12.5, color: 'var(--text-muted)' }}>
-              Semaine incomplète ({currentWeek.elapsedDays}/7 jours) : le ratio montera encore
-              d’ici dimanche.
-            </p>
-          )}
-          {week.weeksUsed > 0 && week.weeksUsed < WEEKLY_LOOKBACK && (
-            <p style={{ marginTop: 8, fontSize: 12.5, color: 'var(--text-muted)' }}>
-              Référence calculée sur {week.weeksUsed} semaine
-              {week.weeksUsed > 1 ? 's' : ''} seulement : elle se stabilisera avec l’historique.
-            </p>
-          )}
-        </Card>
+      <Section title="Zone de risque" full>
+        <div className="pair">
+          <Card
+            title={`Ratio hebdo ${formatRatio(week.ratio)}`}
+            hint={
+              week.weeksUsed === 0
+                ? 'Pas encore de semaine de référence'
+                : `Semaine ${formatLoad(week.current)} UA · moyenne des ${week.weeksUsed} semaines précédentes ${formatLoad(week.baseline)} UA`
+            }
+          >
+            <AcwrGauge ratio={week.ratio} />
+            {weekZone ? (
+              <p style={{ marginTop: 10, fontSize: 13, color: 'var(--text-secondary)' }}>
+                <strong style={{ fontWeight: 640 }}>
+                  {weekZone.icon} {weekZone.label}.
+                </strong>{' '}
+                {weekZone.advice}
+              </p>
+            ) : (
+              <p style={{ marginTop: 10, fontSize: 13, color: 'var(--text-secondary)' }}>
+                Le ratio se calcule des qu’une semaine précédente est renseignée.
+              </p>
+            )}
+            {week.partial && week.ratio !== null && (
+              <p style={{ marginTop: 8, fontSize: 12.5, color: 'var(--text-muted)' }}>
+                Semaine incomplète ({currentWeek.elapsedDays}/7 jours) : le ratio montera encore
+                d’ici dimanche.
+              </p>
+            )}
+            {week.weeksUsed > 0 && week.weeksUsed < week.lookback && (
+              <p style={{ marginTop: 8, fontSize: 12.5, color: 'var(--text-muted)' }}>
+                Référence calculée sur {week.weeksUsed} semaine
+                {week.weeksUsed > 1 ? 's' : ''} seulement : elle se stabilisera avec l’historique.
+              </p>
+            )}
+          </Card>
 
-        <Card
-          title={`ACWR ${formatRatio(m.acwr)}`}
-          hint={`7 j glissants ${formatLoad(m.acute)} UA · 28 j ramenés à la semaine ${formatLoad(m.chronic)} UA`}
-        >
-          <AcwrGauge ratio={m.acwr} />
-          {acwrInfo && (
-            <p style={{ marginTop: 10, fontSize: 13, color: 'var(--text-secondary)' }}>
-              <strong style={{ fontWeight: 640 }}>
-                {acwrInfo.icon} {acwrInfo.label}.
-              </strong>{' '}
-              Lecture glissante, sans effet de bord de début de semaine.
-            </p>
-          )}
-        </Card>
+          <Card
+            title={`ACWR ${formatRatio(m.acwr)}`}
+            hint={`${m.params.acuteWindowDays} j glissants ${formatLoad(m.acute)} UA · ${m.params.chronicWindowDays} j ramenés à la fenêtre ${formatLoad(m.chronic)} UA`}
+          >
+            <AcwrGauge ratio={m.acwr} />
+            {acwrInfo && (
+              <p style={{ marginTop: 10, fontSize: 13, color: 'var(--text-secondary)' }}>
+                <strong style={{ fontWeight: 640 }}>
+                  {acwrInfo.icon} {acwrInfo.label}.
+                </strong>{' '}
+                Lecture glissante, sans effet de bord de début de semaine.
+              </p>
+            )}
+          </Card>
+        </div>
       </Section>
 
-      <Section title="Évolution du ratio (8 semaines)">
-        <Card title="Ratio hebdomadaire" hint="Semaine calendaire / moyenne des 4 précédentes">
+      <Section title="Évolution du ratio (8 semaines)" full>
+        <Card
+          title="Ratio hebdomadaire"
+          hint={`Semaine calendaire / moyenne des ${week.lookback} précédentes`}
+        >
           <RatioTrendChart data={ratioTrend} />
           <TableView
             columns={['Semaine', 'Charge (UA)', 'Référence (UA)', 'Ratio']}
@@ -169,7 +186,7 @@ export function LoadDashboard({
         </Card>
       </Section>
 
-      <Section title="7 derniers jours">
+      <Section title={`${m.params.acuteWindowDays} derniers jours`} full>
         <div className="grid-2">
           <Tile label="Séances" value={m.sessionCount7d} hint={`${m.minutes7d} min cumulées`} />
           <Tile
@@ -191,7 +208,10 @@ export function LoadDashboard({
       </Section>
 
       <Section title="Charge quotidienne (14 jours)">
-        <Card title="Charge par jour" hint="RPE x durée, en unités arbitraires (UA)">
+        <Card
+          title="Charge par jour"
+          hint="Selon le modèle de l’équipe, en unités arbitraires (UA)"
+        >
           <BarSeriesChart
             ariaLabel="Charge quotidienne des 14 derniers jours, en unités arbitraires"
             data={daily.map((d) => ({
@@ -209,10 +229,13 @@ export function LoadDashboard({
       </Section>
 
       <Section title="Tendance glissante (8 semaines)">
-        <Card title="Charge 7 jours vs chronique" hint="Fenêtres glissantes, même unité">
+        <Card
+          title={`Charge ${m.params.acuteWindowDays} jours vs chronique`}
+          hint="Fenêtres glissantes, même unité"
+        >
           <WeeklyLoadChart data={rolling} />
           <TableView
-            columns={['7 jours au', 'Charge', 'Chronique']}
+            columns={[`${m.params.acuteWindowDays} jours au`, 'Charge', 'Chronique']}
             rows={rolling.map((w) => [shortDate(w.end), w.load, Math.round(w.chronic)])}
           />
         </Card>
@@ -223,6 +246,6 @@ export function LoadDashboard({
           <TypeBreakdown byType={byType} />
         </Card>
       </Section>
-    </>
+    </div>
   );
 }

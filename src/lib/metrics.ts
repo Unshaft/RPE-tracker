@@ -1,29 +1,52 @@
 import { addDays, diffDays, lastNDays, startOfWeek, toDayKey } from './date';
-import type { TrainingSession } from './types';
+import {
+  DEFAULT_LOAD_CONTEXT,
+  DEFAULT_LOAD_PARAMS,
+  analysisParams,
+  loadForSession,
+  type LoadContext,
+  type LoadInput,
+} from './loadModels';
+import type { AcwrThresholds, ResolvedLoadParams, TrainingSession } from './types';
 
 /**
- * Métriques de charge d’entrainement (methode session-RPE, Foster 1998/2001).
+ * Métriques de charge d’entrainement.
  *
- *  - charge d’une séance   = RPE (CR-10) x durée en minutes           [UA]
- *  - charge aiguë          = somme des charges sur 7 jours glissants  [UA]
- *  - charge chronique      = moyenne hebdomadaire sur 28 jours        [UA]
+ *  - charge d’une séance   = selon le modèle configuré par l’équipe        [UA]
+ *  - charge aiguë          = somme des charges sur la fenêtre aiguë         [UA]
+ *  - charge chronique      = charge de la fenêtre chronique, ramenée a une semaine
  *  - ACWR                  = charge aiguë / charge chronique          [ratio]
- *  - monotonie             = moyenne / écart-type des charges quotidiennes (7 j, jours de repos inclus)
+ *  - monotonie             = moyenne / écart-type des charges quotidiennes (jours de repos inclus)
  *  - contrainte (strain)   = charge hebdomadaire x monotonie          [UA]
+ *
+ * Toutes ces fonctions prennent un `LoadContext` : l’historique des modèles de
+ * charge choisis par l’équipe. Il est optionnel et vaut par défaut « rien de
+ * configuré », c’est-a-dire exactement le session-RPE de Foster qui était code
+ * en dur auparavant. Un appelant qui ne le passe pas obtient donc les memes
+ * chiffres qu’avant — mais ignore le choix de son équipe : les écrans doivent
+ * le transmettre.
+ *
+ * Le modèle est résolu séance par séance, a la date de la séance et selon son
+ * domaine (terrain / musculation) : une courbe passée ne change pas de forme
+ * parce que le staff a change de modèle ce matin.
  */
 
-export const ACUTE_WINDOW = 7;
-export const CHRONIC_WINDOW = 28;
+/** Valeurs par défaut, conservées pour les écrans qui affichent la fenêtre. */
+export const ACUTE_WINDOW = DEFAULT_LOAD_PARAMS.acuteWindowDays;
+export const CHRONIC_WINDOW = DEFAULT_LOAD_PARAMS.chronicWindowDays;
 
-export function sessionLoad(s: Pick<TrainingSession, 'rpe' | 'durationMin'>): number {
-  return s.rpe * s.durationMin;
+export function sessionLoad(s: LoadInput, ctx: LoadContext = DEFAULT_LOAD_CONTEXT): number {
+  return loadForSession(s, ctx);
 }
 
 /** Charge totale par jour, indexée par cle YYYY-MM-DD. */
-export function dailyLoadMap(sessions: TrainingSession[]): Map<string, number> {
+export function dailyLoadMap(
+  sessions: TrainingSession[],
+  ctx: LoadContext = DEFAULT_LOAD_CONTEXT,
+): Map<string, number> {
   const map = new Map<string, number>();
   for (const s of sessions) {
-    map.set(s.date, (map.get(s.date) ?? 0) + sessionLoad(s));
+    map.set(s.date, (map.get(s.date) ?? 0) + sessionLoad(s, ctx));
   }
   return map;
 }
@@ -33,8 +56,9 @@ export function dailySeries(
   sessions: TrainingSession[],
   end: string,
   days: number,
+  ctx: LoadContext = DEFAULT_LOAD_CONTEXT,
 ): { date: string; load: number }[] {
-  const map = dailyLoadMap(sessions);
+  const map = dailyLoadMap(sessions, ctx);
   return lastNDays(end, days).map((date) => ({ date, load: map.get(date) ?? 0 }));
 }
 
@@ -58,39 +82,95 @@ export function loadOverWindow(
   sessions: TrainingSession[],
   end: string,
   days: number,
+  ctx: LoadContext = DEFAULT_LOAD_CONTEXT,
 ): number {
-  return sum(dailySeries(sessions, end, days).map((d) => d.load));
+  return sum(dailySeries(sessions, end, days, ctx).map((d) => d.load));
 }
 
-export function acuteLoad(sessions: TrainingSession[], end: string): number {
-  return loadOverWindow(sessions, end, ACUTE_WINDOW);
+export function acuteLoad(
+  sessions: TrainingSession[],
+  end: string,
+  ctx: LoadContext = DEFAULT_LOAD_CONTEXT,
+): number {
+  return loadOverWindow(sessions, end, analysisParams(ctx, end).acuteWindowDays, ctx);
 }
 
-/** Charge chronique : charge des 28 derniers jours ramenee a une semaine. */
-export function chronicLoad(sessions: TrainingSession[], end: string): number {
-  return loadOverWindow(sessions, end, CHRONIC_WINDOW) / (CHRONIC_WINDOW / ACUTE_WINDOW);
+/**
+ * Charge chronique, exprimee comme une charge hebdomadaire equivalente pour
+ * rester directement comparable a la charge aiguë.
+ */
+export function chronicLoad(
+  sessions: TrainingSession[],
+  end: string,
+  ctx: LoadContext = DEFAULT_LOAD_CONTEXT,
+): number {
+  const p = analysisParams(ctx, end);
+  if (p.chronicMethod === 'ewma') return ewmaChronicLoad(sessions, end, ctx, p);
+  return (
+    loadOverWindow(sessions, end, p.chronicWindowDays, ctx) /
+    (p.chronicWindowDays / p.acuteWindowDays)
+  );
+}
+
+/**
+ * Variante exponentielle (Williams et al., 2017).
+ *
+ * La moyenne glissante traite le 28e jour comme le 1er puis l’oublie d’un coup ;
+ * l’EWMA fait décroître le poids progressivement, ce qui colle mieux a la
+ * facon dont un organisme perd les benefices d’un bloc. Le lissage est amorce
+ * sur deux fenêtres : demarrer a zéro sous-estimerait la charge chronique tant
+ * que la moyenne n’a pas converge, et gonflerait artificiellement l’ACWR.
+ */
+function ewmaChronicLoad(
+  sessions: TrainingSession[],
+  end: string,
+  ctx: LoadContext,
+  p: ResolvedLoadParams,
+): number {
+  const lambda = 2 / (p.chronicWindowDays + 1);
+  let ewma = 0;
+  for (const day of dailySeries(sessions, end, p.chronicWindowDays * 2, ctx)) {
+    ewma = day.load * lambda + ewma * (1 - lambda);
+  }
+  // L’EWMA est une charge journaliere ; on la ramene a la meme unite que la
+  // charge aiguë, sans quoi le ratio serait faux d’un facteur 7.
+  return ewma * p.acuteWindowDays;
 }
 
 /** Ratio charge aiguë / chronique. `null` tant que la charge chronique est nulle. */
-export function acwr(sessions: TrainingSession[], end: string): number | null {
-  const chronic = chronicLoad(sessions, end);
+export function acwr(
+  sessions: TrainingSession[],
+  end: string,
+  ctx: LoadContext = DEFAULT_LOAD_CONTEXT,
+): number | null {
+  const chronic = chronicLoad(sessions, end, ctx);
   if (chronic <= 0) return null;
-  return acuteLoad(sessions, end) / chronic;
+  return acuteLoad(sessions, end, ctx) / chronic;
 }
 
-/** Monotonie sur 7 jours. `null` si l’écart-type est nul (aucune ou charge constante). */
-export function monotony(sessions: TrainingSession[], end: string): number | null {
-  const loads = dailySeries(sessions, end, ACUTE_WINDOW).map((d) => d.load);
+/** Monotonie sur la fenêtre aiguë. `null` si l’écart-type est nul (aucune ou charge constante). */
+export function monotony(
+  sessions: TrainingSession[],
+  end: string,
+  ctx: LoadContext = DEFAULT_LOAD_CONTEXT,
+): number | null {
+  const loads = dailySeries(sessions, end, analysisParams(ctx, end).acuteWindowDays, ctx).map(
+    (d) => d.load,
+  );
   const sd = stdDev(loads);
   if (sd === 0) return null;
   return mean(loads) / sd;
 }
 
 /** Contrainte = charge hebdomadaire x monotonie. */
-export function strain(sessions: TrainingSession[], end: string): number | null {
-  const m = monotony(sessions, end);
+export function strain(
+  sessions: TrainingSession[],
+  end: string,
+  ctx: LoadContext = DEFAULT_LOAD_CONTEXT,
+): number | null {
+  const m = monotony(sessions, end, ctx);
   if (m === null) return null;
-  return acuteLoad(sessions, end) * m;
+  return acuteLoad(sessions, end, ctx) * m;
 }
 
 export type AcwrZone = 'undertraining' | 'optimal' | 'caution' | 'danger';
@@ -107,12 +187,17 @@ export interface ZoneInfo {
 }
 
 /**
- * Zones ACWR usuelles (Gabbett) : < 0.80 sous-charge, 0.80-1.30 optimal,
- * 1.30-1.50 vigilance, > 1.50 risque élevé.
+ * Zones ACWR. Les seuils usuels (Gabbett : < 0.80 sous-charge, 0.80-1.30
+ * optimal, 1.30-1.50 vigilance, > 1.50 risque élevé) restent le défaut, mais
+ * une équipe peut les deplacer : un sport a faible densite de matchs ne lit pas
+ * la meme montee de charge de la meme facon.
  */
-export function acwrZone(ratio: number | null): ZoneInfo | null {
+export function acwrZone(
+  ratio: number | null,
+  thresholds: AcwrThresholds = DEFAULT_LOAD_PARAMS.acwrThresholds,
+): ZoneInfo | null {
   if (ratio === null) return null;
-  if (ratio < 0.8) {
+  if (ratio < thresholds.low) {
     return {
       zone: 'undertraining',
       label: 'Sous-charge',
@@ -122,7 +207,7 @@ export function acwrZone(ratio: number | null): ZoneInfo | null {
       advice: "Charge en baisse marquee : désentraînement possible si cela dure.",
     };
   }
-  if (ratio <= 1.3) {
+  if (ratio <= thresholds.optimalMax) {
     return {
       zone: 'optimal',
       label: 'Zone optimale',
@@ -132,7 +217,7 @@ export function acwrZone(ratio: number | null): ZoneInfo | null {
       advice: 'Progression de charge maîtrisée, continue ainsi.',
     };
   }
-  if (ratio <= 1.5) {
+  if (ratio <= thresholds.cautionMax) {
     return {
       zone: 'caution',
       label: 'Vigilance',
@@ -168,30 +253,33 @@ export interface PlayerMetrics {
   sessionCount7d: number;
   minutes7d: number;
   avgRpe7d: number | null;
-  /** Charge des 7 jours precedents (J-13 a J-7), pour la variation. */
+  /** Charge de la fenêtre aiguë precedente, pour la variation. */
   previousAcute: number;
   /** Variation relative de la charge aiguë, `null` si semaine précédente vide. */
   acuteDelta: number | null;
-  /** Lecture calendaire : semaine en cours vs 4 semaines precedentes. */
+  /** Lecture calendaire : semaine en cours vs semaines precedentes. */
   week: WeeklyRatio;
+  /** Paramètres effectivement appliques, pour que l’UI puisse les afficher. */
+  params: ResolvedLoadParams;
 }
 
 export function computePlayerMetrics(
   sessions: TrainingSession[],
   end: string,
+  ctx: LoadContext = DEFAULT_LOAD_CONTEXT,
 ): PlayerMetrics {
-  const window7 = sessions.filter(
-    (s) => s.date <= end && s.date > addDays(end, -ACUTE_WINDOW),
-  );
-  const acute = acuteLoad(sessions, end);
-  const previousAcute = acuteLoad(sessions, addDays(end, -ACUTE_WINDOW));
+  const params = analysisParams(ctx, end);
+  const acuteWindow = params.acuteWindowDays;
+  const window7 = sessions.filter((s) => s.date <= end && s.date > addDays(end, -acuteWindow));
+  const acute = acuteLoad(sessions, end, ctx);
+  const previousAcute = acuteLoad(sessions, addDays(end, -acuteWindow), ctx);
   const minutes7d = window7.reduce((a, s) => a + s.durationMin, 0);
   return {
     acute,
-    chronic: chronicLoad(sessions, end),
-    acwr: acwr(sessions, end),
-    monotony: monotony(sessions, end),
-    strain: strain(sessions, end),
+    chronic: chronicLoad(sessions, end, ctx),
+    acwr: acwr(sessions, end, ctx),
+    monotony: monotony(sessions, end, ctx),
+    strain: strain(sessions, end, ctx),
     sessionCount7d: window7.length,
     minutes7d,
     avgRpe7d: window7.length
@@ -199,13 +287,14 @@ export function computePlayerMetrics(
       : null,
     previousAcute,
     acuteDelta: previousAcute > 0 ? (acute - previousAcute) / previousAcute : null,
-    week: weeklyRatio(sessions, end),
+    week: weeklyRatio(sessions, end, ctx),
+    params,
   };
 }
 
 /**
- * Serie de fenêtres glissantes de 7 jours, de la plus ancienne a la plus
- * récente, la dernière se terminant a `end`.
+ * Serie de fenêtres glissantes de la largeur de la fenêtre aiguë, de la plus
+ * ancienne a la plus récente, la dernière se terminant a `end`.
  *
  * Volontairement glissantes et non calendaires : une semaine calendaire en
  * cours est incomplète et produirait un faux décrochage en fin de courbe.
@@ -214,17 +303,19 @@ export function weeklySeries(
   sessions: TrainingSession[],
   end: string,
   weeks: number,
+  ctx: LoadContext = DEFAULT_LOAD_CONTEXT,
 ): { start: string; end: string; load: number; chronic: number; sessions: number }[] {
+  const window = analysisParams(ctx, end).acuteWindowDays;
   const out: { start: string; end: string; load: number; chronic: number; sessions: number }[] = [];
   for (let i = weeks - 1; i >= 0; i--) {
-    const windowEnd = addDays(end, -ACUTE_WINDOW * i);
-    const windowStart = addDays(windowEnd, -(ACUTE_WINDOW - 1));
+    const windowEnd = addDays(end, -window * i);
+    const windowStart = addDays(windowEnd, -(window - 1));
     const inWindow = sessions.filter((s) => s.date >= windowStart && s.date <= windowEnd);
     out.push({
       start: windowStart,
       end: windowEnd,
-      load: inWindow.reduce((a, s) => a + sessionLoad(s), 0),
-      chronic: chronicLoad(sessions, windowEnd),
+      load: inWindow.reduce((a, s) => a + sessionLoad(s, ctx), 0),
+      chronic: chronicLoad(sessions, windowEnd, ctx),
       sessions: inWindow.length,
     });
   }
@@ -236,12 +327,13 @@ export function loadByType(
   sessions: TrainingSession[],
   end: string,
   days: number,
+  ctx: LoadContext = DEFAULT_LOAD_CONTEXT,
 ): Map<string, number> {
   const from = addDays(end, -(days - 1));
   const out = new Map<string, number>();
   for (const s of sessions) {
     if (s.date < from || s.date > end) continue;
-    out.set(s.type, (out.get(s.type) ?? 0) + sessionLoad(s));
+    out.set(s.type, (out.get(s.type) ?? 0) + sessionLoad(s, ctx));
   }
   return out;
 }
@@ -263,8 +355,8 @@ export function referenceDay(sessions: TrainingSession[]): string {
  * la semaine en cours. Les deux ratios sont exposes cote a cote.
  * ------------------------------------------------------------------ */
 
-/** Nombre de semaines de reference pour le ratio hebdomadaire. */
-export const WEEKLY_LOOKBACK = 4;
+/** Nombre de semaines de reference par défaut pour le ratio hebdomadaire. */
+export const WEEKLY_LOOKBACK = DEFAULT_LOAD_PARAMS.weeklyLookbackWeeks;
 
 export interface CalendarWeek {
   /** Lundi de la semaine. */
@@ -283,6 +375,7 @@ function buildCalendarWeek(
   sessions: TrainingSession[],
   monday: string,
   reference: string,
+  ctx: LoadContext,
 ): CalendarWeek {
   const end = addDays(monday, 6);
   const inWeek = sessions.filter((s) => s.date >= monday && s.date <= end);
@@ -290,7 +383,7 @@ function buildCalendarWeek(
   return {
     start: monday,
     end,
-    load: inWeek.reduce((a, s) => a + sessionLoad(s), 0),
+    load: inWeek.reduce((a, s) => a + sessionLoad(s, ctx), 0),
     sessions: inWeek.length,
     elapsedDays,
     partial: elapsedDays < 7,
@@ -305,11 +398,12 @@ export function calendarWeeks(
   sessions: TrainingSession[],
   end: string,
   weeks: number,
+  ctx: LoadContext = DEFAULT_LOAD_CONTEXT,
 ): CalendarWeek[] {
   const currentMonday = startOfWeek(end);
   const out: CalendarWeek[] = [];
   for (let i = weeks - 1; i >= 0; i--) {
-    out.push(buildCalendarWeek(sessions, addDays(currentMonday, -7 * i), end));
+    out.push(buildCalendarWeek(sessions, addDays(currentMonday, -7 * i), end, ctx));
   }
   return out;
 }
@@ -331,6 +425,8 @@ export interface WeeklyRatio {
   ratio: number | null;
   /** Semaines precedentes reellement prises en compte (au plus `lookback`). */
   weeksUsed: number;
+  /** Profondeur de reference demandee, telle que configuree par l’équipe. */
+  lookback: number;
   elapsedDays: number;
   partial: boolean;
 }
@@ -348,9 +444,10 @@ export interface WeeklyRatio {
 export function weeklyRatio(
   sessions: TrainingSession[],
   end: string,
-  lookback = WEEKLY_LOOKBACK,
+  ctx: LoadContext = DEFAULT_LOAD_CONTEXT,
+  lookback = analysisParams(ctx, end).weeklyLookbackWeeks,
 ): WeeklyRatio {
-  const weeks = calendarWeeks(sessions, end, lookback + 1);
+  const weeks = calendarWeeks(sessions, end, lookback + 1, ctx);
   const current = weeks[weeks.length - 1];
   const first = firstSessionDate(sessions);
   const previous = weeks
@@ -362,6 +459,7 @@ export function weeklyRatio(
     baseline,
     ratio: baseline > 0 ? current.load / baseline : null,
     weeksUsed: previous.length,
+    lookback,
     elapsedDays: current.elapsedDays,
     partial: current.partial,
   };
@@ -382,11 +480,14 @@ export function weeklyRatioSeries(
   sessions: TrainingSession[],
   end: string,
   weeks: number,
-  lookback = WEEKLY_LOOKBACK,
+  ctx: LoadContext = DEFAULT_LOAD_CONTEXT,
+  lookback?: number,
 ): WeeklyRatioPoint[] {
-  return calendarWeeks(sessions, end, weeks).map((week) => {
+  return calendarWeeks(sessions, end, weeks, ctx).map((week) => {
     const asOf = week.end < end ? week.end : end;
-    const r = weeklyRatio(sessions, asOf, lookback);
+    // `lookback` reste resolu a la date du point : si l’équipe a change de
+    // profondeur de reference, chaque point garde celle qui avait cours.
+    const r = weeklyRatio(sessions, asOf, ctx, lookback ?? analysisParams(ctx, asOf).weeklyLookbackWeeks);
     return { ...week, baseline: r.baseline, ratio: r.ratio };
   });
 }

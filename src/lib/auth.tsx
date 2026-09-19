@@ -41,6 +41,15 @@ interface AuthContextValue {
   joinTeam: (code: string) => Promise<void>;
   /** Coach : crée une équipe et s’y rattache. */
   createOwnTeam: (name: string) => Promise<Team>;
+  /** Coach : régénère le jeton d’invitation ; l’ancien meurt sur-le-champ. */
+  rotateInvite: (expiresAt: string | null) => Promise<Team>;
+  /** Coach : coupe l’invitation, plus personne ne rejoint l’équipe. */
+  revokeInvite: () => Promise<Team>;
+  /**
+   * Supprime le compte et ferme la session. `confirmTeamDeletion` est exigé
+   * d’un coach, dont la suppression emporte l’équipe.
+   */
+  deleteAccount: (confirmTeamDeletion?: boolean) => Promise<void>;
   refresh: () => void;
 }
 
@@ -179,7 +188,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Session ouverte : les écritures passent RLS, l'équipe est reglée ici.
       if (input.role === 'coach') {
-        await db.createTeam(teamName, userId);
+        await db.createTeam(teamName);
       } else if (inviteCode) {
         try {
           await db.joinTeamByCode(inviteCode);
@@ -230,7 +239,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const createOwnTeam = useCallback(
     async (name: string) => {
       if (!user) throw new db.DbError('Session expirée, reconnecte-toi.');
-      const created = await db.createTeam(name, user.id);
+      const created = await db.createTeam(name);
       setUser({ ...user, teamId: created.id });
       setTeam(created);
       refresh();
@@ -238,6 +247,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     [user, refresh],
   );
+
+  const rotateInvite = useCallback(async (expiresAt: string | null) => {
+    const updated = await db.rotateTeamInvite(expiresAt);
+    setTeam(updated);
+    return updated;
+  }, []);
+
+  const revokeInvite = useCallback(async () => {
+    const updated = await db.revokeTeamInvite();
+    setTeam(updated);
+    return updated;
+  }, []);
+
+  const deleteAccount = useCallback(async (confirmTeamDeletion = false) => {
+    await db.deleteMyAccount(confirmTeamDeletion);
+    // Le compte n'existe plus, mais le jeton de session reste valide jusqu'à
+    // son expiration : sans déconnexion explicite, l'app resterait affichée
+    // sur les données d'un utilisateur supprimé, avec des requêtes vides.
+    await supabase.auth.signOut();
+    setUser(null);
+    setTeam(null);
+    refresh();
+  }, [refresh]);
 
   const value = useMemo(
     () => ({
@@ -251,6 +283,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updateProfile,
       joinTeam,
       createOwnTeam,
+      rotateInvite,
+      revokeInvite,
+      deleteAccount,
       refresh,
     }),
     [
@@ -264,6 +299,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updateProfile,
       joinTeam,
       createOwnTeam,
+      rotateInvite,
+      revokeInvite,
+      deleteAccount,
       refresh,
     ],
   );

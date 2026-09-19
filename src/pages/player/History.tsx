@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Header, Main } from '../../components/Layout';
 import { Card, EmptyState, Loading, Section, rpeVars } from '../../components/ui';
+import { useLoadContext } from '../../components/loadContext';
 import { formatLoad, plural } from '../../components/charts/chartUtils';
 import { useAuth } from '../../lib/auth';
 import { longDate, startOfWeek, weekLabel } from '../../lib/date';
@@ -22,6 +23,7 @@ function groupByWeek(sessions: TrainingSession[]) {
 
 export function History() {
   const { user, refresh } = useAuth();
+  const ctx = useLoadContext();
   const navigate = useNavigate();
   const { data: sessions, loading, error } = usePlayerSessions(user?.id);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -67,7 +69,7 @@ export function History() {
           </div>
         ) : (
           weeks.map(([monday, weekSessions]) => {
-            const total = weekSessions.reduce((a, s) => a + sessionLoad(s), 0);
+            const total = weekSessions.reduce((a, s) => a + sessionLoad(s, ctx), 0);
                         return (
               <Section
                 key={monday}
@@ -108,7 +110,7 @@ export function History() {
                                 {longDate(s.date)} · {s.durationMin} min
                               </div>
                             </div>
-                            <span className="list__value">{sessionLoad(s)} UA</span>
+                            <span className="list__value">{Math.round(sessionLoad(s, ctx))} UA</span>
                           </button>
                           {open && (
                             <div style={{ padding: '0 14px 14px', display: 'grid', gap: 10 }}>

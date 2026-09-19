@@ -1,16 +1,19 @@
 # RPE Tracker
 
-Application mobile de suivi de la **charge d'entraînement** par la méthode
-*session-RPE* (Foster), avec deux profils d'utilisateurs : **joueur** et **coach**.
+Suivi de la **charge d'entraînement** par la méthode *session-RPE* (Foster),
+pour un club et son effectif. Deux profils : **joueur** et **coach**.
 
-- Le **joueur** saisit chaque séance (type, durée, RPE sur l'échelle CR-10) et
-  suit sa charge, son ratio aigu/chronique, sa monotonie et sa contrainte.
-- Le **coach** suit l'ensemble de son effectif : charge moyenne, participation,
-  joueurs en zone de risque, et fiche détaillée par joueur.
+- Le **joueur** déclare chaque séance en quelques appuis (type, durée, RPE sur
+  l'échelle CR-10) et suit sa charge, son ratio aigu/chronique, sa monotonie et
+  sa contrainte.
+- Le **coach** suit son effectif : participation, charge de la semaine joueur
+  par joueur, alertes, et une fiche détaillée par joueur.
 
-L'interface est pensée **exclusivement pour le téléphone** (navigation par
-onglets en bas, cibles tactiles ≥ 44 px, saisie en quelques appuis). Sur grand
-écran, l'app reste dans une colonne au format téléphone.
+L'interface est pensée **exclusivement pour le téléphone**. React + TypeScript +
+Vite, Supabase (Postgres + Auth + RLS), déployé sur Vercel.
+
+Ces indicateurs sont des aides au pilotage de l'entraînement ; **ils ne
+remplacent pas un avis médical.**
 
 ## Démarrer
 
@@ -20,146 +23,61 @@ vercel env pull --yes   # récupère la configuration Supabase dans .env.local
 npm run dev             # http://localhost:5173
 ```
 
-Autres scripts :
+⚠️ Le réglage **« Confirm email » doit être désactivé** sur le projet Supabase,
+sinon l'inscription échoue. Le pourquoi est dans
+[docs/60-mise-en-route.md](docs/60-mise-en-route.md).
 
-```bash
-npm run build      # build de production (tsc + vite)
-npm run preview    # sert le build
-npm test           # tests unitaires des métriques (vitest)
-npm run typecheck  # tsc --noEmit
-npm run db:migrate # applique les migrations SQL en attente
-npm run db:verify  # vérifie les policies RLS de bout en bout
-```
+| Script | |
+|---|---|
+| `npm run build` | build de production (tsc + vite) |
+| `npm test` | tests unitaires du cœur métier (vitest) |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm run db:migrate` | applique les migrations SQL en attente |
+| `npm run db:verify` | vérifie les policies RLS de bout en bout |
 
-Les comptes sont créés depuis l'application. Un coach saisit le nom de son
-équipe à l'inscription et obtient un code d'invitation à six caractères, que
-ses joueurs renseignent à leur tour pour rejoindre l'effectif.
+## Documentation
 
-L'inscription ouvre la session immédiatement : l'équipe est créée (coach) ou
-rejointe (joueur) dans la foulée. Cela suppose que *Confirm email* soit
-**désactivé** dans Authentication → Sign In / Providers du tableau de bord
-Supabase ; sinon l'inscription s'arrête sur un message explicite.
+Toute la documentation vit dans [`docs/`](docs/). Elle est écrite pour quelqu'un
+qui arrive sur le projet et n'en sait rien.
 
-Le service d'e-mail intégré de Supabase est plafonné à 2 envois par heure et
-n'est prévu que pour le développement. Avant d'ouvrir l'app à de vrais
-utilisateurs, configurer un SMTP personnel dans Authentication → Emails.
+| Document | Ce qu'on y trouve |
+|---|---|
+| [00 — Contrat : modèles de charge configurables](docs/00-contrat-modeles-de-charge.md) | Le cadrage de la fonctionnalité **en cours de développement**. Fait autorité, ne pas modifier. |
+| [10 — Vue d'ensemble](docs/10-vue-d-ensemble.md) | À quoi sert le produit, pour qui, ce qu'il n'est pas, les contraintes assumées. |
+| [20 — Le modèle métier](docs/20-modele-metier.md) | **Le cœur.** session-RPE, charge aiguë/chronique, ACWR, monotonie, contrainte, et pourquoi deux ratios coexistent. Formules, unités, seuils, références. |
+| [30 — Architecture](docs/30-architecture.md) | Les couches, le rôle de chaque fichier de `src/lib/`, le routage et sa protection par rôle, le flux de données. |
+| [40 — Base de données et sécurité](docs/40-base-de-donnees-et-securite.md) | Les tables et surtout le **modèle RLS** : comment l'isolation joueur/coach est réellement garantie, le schéma `private`, les fonctions `security definer`. |
+| [50 — Journal des décisions](docs/50-journal-des-decisions.md) | Commit par commit, les décisions structurantes et leur justification. À lire quand on se demande « pourquoi c'est fait comme ça ». |
+| [60 — Mise en route développeur](docs/60-mise-en-route.md) | Installation, variables d'environnement, scripts, migrations, tests, déploiement. |
 
-## Métriques
+**Par où commencer :** [10](docs/10-vue-d-ensemble.md) →
+[20](docs/20-modele-metier.md) → [60](docs/60-mise-en-route.md), puis
+[40](docs/40-base-de-donnees-et-securite.md) avant de toucher à la base.
 
-Toutes les charges sont exprimées en **unités arbitraires (UA)**.
+## Repères rapides
+
+Toutes les charges sont en **unités arbitraires (UA)**.
 
 | Indicateur | Définition | Repères |
 |---|---|---|
 | Charge d'une séance | `RPE (CR-10) × durée (min)` | — |
-| Charge aiguë | somme des charges sur **7 jours** glissants | — |
+| Charge aiguë | somme sur **7 jours** glissants | — |
 | Charge chronique | charge des **28 jours** ramenée à une semaine | — |
-| **ACWR** | charge aiguë / charge chronique | < 0,80 sous-charge · 0,80–1,30 optimal · 1,30–1,50 vigilance · > 1,50 risque |
-| Monotonie | moyenne / écart-type des charges quotidiennes sur 7 jours, **jours de repos inclus** (écart-type de population) | < 1,5 bien variée · ≥ 2 trop monotone |
+| **ACWR** | aiguë / chronique | < 0,80 sous-charge · 0,80–1,30 optimal · 1,30–1,50 vigilance · > 1,50 risque |
+| Ratio hebdomadaire | semaine calendaire en cours / moyenne des 4 précédentes | mêmes seuils |
+| Monotonie | moyenne / écart-type des charges quotidiennes sur 7 jours, jours de repos inclus | < 1,5 bien variée · ≥ 2 trop monotone |
 | Contrainte (*strain*) | charge hebdomadaire × monotonie | — |
 
-Les séries temporelles utilisent des **fenêtres glissantes de 7 jours** et non
-des semaines calendaires : la semaine en cours étant incomplète, une découpe
-calendaire produirait un faux décrochage en fin de courbe.
+## Organisation du dépôt
 
-Ces indicateurs sont des aides au pilotage de l'entraînement ; ils ne
-remplacent pas un avis médical.
-
-## Architecture
-
+```text
+src/lib/          domaine, calcul, accès aux données, session   ← le cœur, testé
+src/components/   briques d'UI et graphiques SVG maison
+src/pages/        un écran par route (player/ et coach/)
+supabase/         migrations SQL : schéma, policies RLS, triggers
+scripts/          migrations, requêtes ad hoc, smoke-test RLS
+docs/             la documentation
 ```
-src/
-  lib/
-    types.ts      modèle de données (User, Team, TrainingSession)
-    metrics.ts    calcul de charge, ACWR, monotonie, contrainte  ← testé
-    team.ts       agrégations d'équipe (classements, alertes, moyennes)
-    date.ts       utilitaires de date en heure locale (clés YYYY-MM-DD)
-    supabase.ts   client Supabase et schéma typé de la base
-    db.ts         accès aux données : seul fichier qui connaît les tables
-    auth.tsx      contexte d'authentification (Supabase Auth) et de session
-    hooks.ts      chargement asynchrone des données pour les écrans
-  components/
-    charts/       graphiques SVG maison (barres, lignes, jauge, sparkline)
-    LoadDashboard.tsx  bloc d'analyse partagé joueur / fiche coach
-  pages/
-    player/       tableau de bord, saisie, historique
-    coach/        tableau de bord équipe, effectif, fiche joueur
-supabase/
-  migrations/     schéma SQL, policies RLS, triggers
-scripts/
-  migrate.mjs     applique les migrations en attente
-  smoke-rls.mjs   vérifie le cloisonnement des données
-```
-
-### Persistance
-
-Les données vivent dans **Postgres, chez Supabase**. `src/lib/db.ts` est le seul
-fichier qui connaît la forme des tables : il traduit les colonnes `snake_case`
-en types du domaine, et les écrans n'en savent rien.
-
-L'authentification est déléguée à **Supabase Auth** (e-mail / mot de passe,
-jetons JWT). L'application ne manipule aucun mot de passe.
-
-#### Cloisonnement
-
-L'isolation n'est pas assurée par le code client mais par les **policies RLS**,
-c'est-à-dire par la base elle-même. Un client malveillant qui utiliserait la clé
-anon pour demander les séances d'un autre joueur ne reçoit pas une erreur : il
-reçoit zéro ligne.
-
-| Qui | Voit | Écrit |
-|---|---|---|
-| Joueur | son profil, ses séances, son équipe | ses séances, son profil |
-| Coach | les profils et séances de son effectif | son équipe, son profil |
-| Tiers | rien | rien |
-
-Deux détails qui comptent :
-
-- les fonctions d'appui aux policies vivent dans un schéma `private`, que
-  PostgREST n'expose pas — mais `authenticated` doit pouvoir les **exécuter**,
-  puisqu'une policy est évaluée avec les privilèges de l'appelant ;
-- rejoindre une équipe passe par la fonction `join_team(code)` en
-  `SECURITY DEFINER`, car lister les équipes rendrait les codes d'invitation
-  énumérables.
-
-`npm run db:verify` vérifie tout cela contre la vraie base, avec la clé anon :
-il crée des comptes jetables, tente les accès interdits et les supprime.
-
-#### Migrations
-
-Le schéma est versionné dans `supabase/migrations`. `npm run db:migrate`
-applique celles qui manquent, chacune dans une transaction, et mémorise le
-résultat dans `schema_migrations`.
-
-La connexion est chiffrée avec vérification du certificat : Supabase signe ses
-serveurs Postgres avec sa propre autorité racine, absente du magasin système,
-donc `scripts/supabase-ca.crt` est épinglé explicitement.
-
-### Visualisations
-
-Les graphiques sont écrits en SVG, sans librairie, pour tenir les contraintes
-d'accessibilité de bout en bout :
-
-- palette catégorielle et rampe ordinale RPE validées pour les déficiences de
-  la vision des couleurs (écart CVD ΔE ≥ 8, contraste vérifié sur les deux
-  surfaces claire et sombre) ;
-- une seule série ⇒ une seule couleur ; deux séries ⇒ légende **et** étiquettes
-  directes, jamais deux axes ;
-- chaque graphique a une **vue tableau** dépliable donnant les valeurs exactes ;
-- les couleurs de statut (zones ACWR) sont toujours accompagnées d'une icône et
-  d'un libellé, jamais seules ;
-- thème clair / sombre / système, respect de `prefers-reduced-motion`.
-
-## Tests
-
-`npm test` couvre le cœur métier (`src/lib/metrics.ts`) : calcul de charge,
-fenêtres glissantes, ACWR et ses zones, monotonie et contrainte (écart-type de
-population, jours de repos inclus), agrégats hebdomadaires et cas limites
-(historique vide, division par zéro, bornes de fenêtre).
-
-`npm run db:verify` couvre le cloisonnement des données contre la base réelle :
-création de profil par trigger, code d'invitation, rattachement différé à
-l'équipe, contraintes de validation, et surtout ce que chaque rôle ne doit
-**pas** pouvoir lire ou écrire.
 
 ## Licence
 

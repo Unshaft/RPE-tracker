@@ -5,6 +5,7 @@ import {
   type PlayerMetrics,
   type ZoneInfo,
 } from './metrics';
+import { DEFAULT_LOAD_CONTEXT, type LoadContext } from './loadModels';
 import type { PublicUser, TrainingSession } from './types';
 
 export interface PlayerRow {
@@ -21,22 +22,33 @@ export interface PlayerRow {
   lastSessionDate: string | null;
 }
 
+/**
+ * Le `LoadContext` traverse toutes les fonctions de ce fichier plutot que
+ * d'etre lu une fois : une ligne d'effectif melange des metriques (calculees
+ * par `computePlayerMetrics`) et des series (calculees ici), et les deux
+ * doivent imperativement sortir du meme modele, sans quoi le total d'une
+ * micro-tendance ne correspondrait pas a la charge affichee a cote.
+ */
 export function buildTeamRows(
   players: PublicUser[],
   sessionsByPlayer: Map<string, TrainingSession[]>,
   referenceDate: string,
+  ctx: LoadContext = DEFAULT_LOAD_CONTEXT,
 ): PlayerRow[] {
   return players.map((player) => {
     const sessions = (sessionsByPlayer.get(player.id) ?? [])
       .slice()
       .sort((a, b) => b.date.localeCompare(a.date));
-    const metrics = computePlayerMetrics(sessions, referenceDate);
+    const metrics = computePlayerMetrics(sessions, referenceDate, ctx);
     return {
       player,
       sessions,
       metrics,
-      zone: riskZone(metrics.week.ratio),
-      spark: calendarWeeks(sessions, referenceDate, 6).map((w) => w.load),
+      // Les seuils viennent des parametres effectivement appliques : une equipe
+      // qui a deplace sa zone optimale doit voir ses propres couleurs, pas
+      // celles de Gabbett par defaut.
+      zone: riskZone(metrics.week.ratio, metrics.params.acwrThresholds),
+      spark: calendarWeeks(sessions, referenceDate, 6, ctx).map((w) => w.load),
       lastSessionDate: sessions[0]?.date ?? null,
     };
   });
@@ -85,9 +97,10 @@ export function teamWeeklyAverage(
   rows: PlayerRow[],
   referenceDate: string,
   weeks: number,
+  ctx: LoadContext = DEFAULT_LOAD_CONTEXT,
 ): { start: string; end: string; load: number; partial: boolean }[] {
   if (rows.length === 0) return [];
-  const perPlayer = rows.map((r) => calendarWeeks(r.sessions, referenceDate, weeks));
+  const perPlayer = rows.map((r) => calendarWeeks(r.sessions, referenceDate, weeks, ctx));
   return perPlayer[0].map((week, i) => ({
     start: week.start,
     end: week.end,

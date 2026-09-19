@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { formatLoad, niceScale, roundedTopBar, useMeasure } from './chartUtils';
+import { chartHeight, formatLoad, niceScale, roundedTopBar, useMeasure } from './chartUtils';
 
 export interface BarPoint {
   /** Cle unique (date, semaine...). */
@@ -20,16 +20,20 @@ export function BarSeriesChart({
   data,
   ariaLabel,
   unit = 'UA',
-  height = 150,
+  minHeight = 150,
 }: {
   data: BarPoint[];
   ariaLabel: string;
   unit?: string;
-  height?: number;
+  /** Plancher de hauteur, atteint sur telephone. */
+  minHeight?: number;
 }) {
   const { ref, width } = useMeasure<HTMLDivElement>();
   const [active, setActive] = useState<number | null>(null);
 
+  // Des barres deux fois plus larges que hautes se comparent mal : la hauteur
+  // suit la largeur pour que le rapport entre colonnes reste lisible.
+  const height = chartHeight(width, 0.3, minHeight, 260);
   const padLeft = 30;
   const padRight = 6;
   const padTop = 10;
@@ -110,7 +114,10 @@ export function BarSeriesChart({
         <div
           className="tooltip"
           style={{
-            left: Math.min(Math.max(padLeft + active! * slot + slot / 2, 56), Math.max(width - 56, 56)),
+            left: Math.min(
+              Math.max(padLeft + active! * slot + slot / 2, 56),
+              Math.max(width - 56, 56),
+            ),
             top: y(point.value) - 8,
           }}
         >

@@ -1,0 +1,12 @@
+node_modules
+dist
+coverage
+.vercel
+*.tsbuildinfo
+package-lock.json
+# Le certificat est un fichier PEM, pas du texte à reformater.
+scripts/supabase-ca.crt
+
+# Pas de parseur Prettier pour ce format.
+.gitattributes
+.env.example
